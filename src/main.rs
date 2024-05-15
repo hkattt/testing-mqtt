@@ -8,7 +8,7 @@ use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 const INSTANCECOUNT_TOPIC: &str = "request/instancecount";
 const QOS_TOPIC: &str = "request/qos";
 const DELAY_TOPIC: &str = "request/delay";
-const SEND_DURATION: u64 = 10; // Seconds
+const SEND_DURATION: u64 = 2; // Seconds
 
 #[tokio::main]
 async fn main() {
@@ -16,20 +16,16 @@ async fn main() {
     let hostname = "localhost";
     let port = 1883;
 
-    let instancecount = 1;
-    let qos = QoS::AtMostOnce;
-    let delay = 1000; // ms
-
-    let analyser_qos = QoS::AtMostOnce;
-    let npublishers = 1;
+    let analyser_qos = QoS::AtMostOnce; // TODO: Vary this too
+    let npublishers = 5;
 
     println!("SPAWNING ANALYSER TASK\n");
 
     let analyser_task = tokio::spawn(
-        analyser::main_analyser(hostname, port, analyser_qos, instancecount, qos, delay)
+        analyser::main_analyser(hostname, port, analyser_qos)
     );
 
-    println!("SPAWNING {} PUBLISHER TASK(S)\n", npublishers);
+    println!("SPAWNING PUBLISHER TASK(S)\n");
 
     let mut publisher_tasks = Vec::new();
     for publisher_id in 1..=npublishers {
@@ -39,8 +35,6 @@ async fn main() {
             )
         );
     }
-
-    println!("WAITING FOR TASKS TO FINISH\n");
 
     // Wait for all tasks to finish
     analyser_task.await.unwrap();
@@ -55,6 +49,7 @@ fn create_mqtt_conn(client_id: &str, hostname: &str, port: u16) -> (AsyncClient,
     // Create MQTT options
     let mut options = MqttOptions::new(client_id, hostname, port);
     options.set_keep_alive(Duration::from_secs(5));
+    options.set_clean_session(true);
 
     // Create MQTT client and connection 
     AsyncClient::new(options, 10)

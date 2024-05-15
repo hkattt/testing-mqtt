@@ -24,7 +24,6 @@ pub async fn main_publisher(publisher_id: u16, hostname: &str, port: u16) {
         }
 
         if let Ok(event) = eventloop.poll().await {
-            println!("{:?}", event);
             match event {
                 Event::Incoming(Packet::Publish(publish)) => {
                     // Receive instancecount 
@@ -63,9 +62,9 @@ pub async fn main_publisher(publisher_id: u16, hostname: &str, port: u16) {
 
     let publisher_topic = publisher_topic_string(instancecount, qos, delay);
 
-    let start = std::time::Instant::now();
+    let counter_task = task::spawn(async move {
+        let start = std::time::Instant::now();
 
-    task::spawn(async move {
         for counter in 0.. {
             // Publish the counter value
             if let Err(error) = publisher.publish(&publisher_topic, qos, false, counter.to_string()).await {
@@ -74,10 +73,14 @@ pub async fn main_publisher(publisher_id: u16, hostname: &str, port: u16) {
                 println!("{} successfully published {} to topic: {}", publisher_id, counter, publisher_topic);
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+
+            if start.elapsed().as_secs() > SEND_DURATION {
+                break;
+            } 
         }
     });
 
-    while start.elapsed().as_secs() <= SEND_DURATION {
+    while !counter_task.is_finished() {
         eventloop.poll().await.unwrap();
     }
 }

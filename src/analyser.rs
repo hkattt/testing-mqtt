@@ -1,7 +1,7 @@
 use tokio::task;
 use rumqttc::{Event, Packet, QoS};
 
-use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8};
+use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, SEND_DURATION};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC};
 
 pub async fn main_analyser(hostname: &str, port: u16, analyser_qos: QoS, instancecount: u8, qos: QoS, delay: u64) {
@@ -42,6 +42,8 @@ pub async fn main_analyser(hostname: &str, port: u16, analyser_qos: QoS, instanc
         }
     });
 
+    let start = std::time::Instant::now();
+
     // Event loop to handle incoming messages
     while let Ok(event) = eventloop.poll().await {
         match event {
@@ -52,6 +54,9 @@ pub async fn main_analyser(hostname: &str, port: u16, analyser_qos: QoS, instanc
                 }
             }
             _ => {}
+        }
+        if start.elapsed().as_secs() > SEND_DURATION {
+            break;
         }
     }
 }

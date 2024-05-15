@@ -8,7 +8,7 @@ use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 const INSTANCECOUNT_TOPIC: &str = "request/instancecount";
 const QOS_TOPIC: &str = "request/qos";
 const DELAY_TOPIC: &str = "request/delay";
-const SEND_DURATION: u64 = 5; // Seconds
+const SEND_DURATION: u64 = 10; // Seconds
 
 #[tokio::main]
 async fn main() {
@@ -20,7 +20,7 @@ async fn main() {
     let qos = QoS::AtMostOnce;
     let delay = 1000; // ms
 
-    let analyser_qos = QoS::AtLeastOnce;
+    let analyser_qos = QoS::AtMostOnce;
     let npublishers = 1;
 
     println!("SPAWNING ANALYSER TASK\n");
@@ -47,6 +47,8 @@ async fn main() {
     for publisher_task in publisher_tasks {
         publisher_task.await.unwrap();
     }
+
+    println!("TASKS COMPLETED");
 }
 
 fn create_mqtt_conn(client_id: &str, hostname: &str, port: u16) -> (AsyncClient, EventLoop) {

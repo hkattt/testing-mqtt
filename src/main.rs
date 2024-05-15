@@ -55,37 +55,28 @@ async fn main_analyser(hostname: &str, port: u16, instancecount: u8, qos: QoS, d
 
     println!("Analyser successfully subscribed to topic {}", topic);
 
-    let analyser_task = tokio::spawn(async move {
-        match eventloop.poll().await.unwrap() {
+    while let Ok(event) = eventloop.poll().await {
+        match event {
             Event::Incoming(packet) => {
                 if let rumqttc::Packet::Publish(publish) = packet {
                     if publish.topic == topic {
-                        println!("Received message: {:?}", publish.payload);
+                        println!("Received message: {:?} on topic {}", publish.payload, topic);
                     }
                 }
-            },
-            _ => ()
+            }
+            _ => {}
         }
-    });
-
-    // Connect the analyser client
-    // TODO: Is this needed
-    
-    // Wait for the analyser task to finish
-    analyser_task.await.unwrap();
+    }
 }
 
 async fn main_publisher(pub_id: u16, hostname: &str, port: u16, instancecount: u8, qos: QoS, delay: u64) {
     let pub_id = format!("client{}", pub_id);
     // TODO: Create unique ID
-    let (publisher, mut _eventloop) = create_mqtt_conn(&pub_id, hostname, port);
+    let (publisher, _eventloop) = create_mqtt_conn(&pub_id, hostname, port);
 
     println!("Successfull MQTT connection: {}", pub_id);
 
     let topic = publisher_topic_string(instancecount, qos, delay);
-
-    // Connect the publisher client
-    // TODO: Is this needed
 
     if let Err(error) = publisher.subscribe(&topic, qos).await {
         eprintln!("Publisher unable to subscribe to topic {} with error: {}", topic, error);
@@ -115,6 +106,7 @@ async fn publish_counter(client: AsyncClient, topic: &str, qos: QoS, delay: u64)
 
     while start_time.elapsed().unwrap().as_secs() < 60 {
         client.publish(topic, qos, false, counter.to_string()).await?;
+        println!("Publisher successfully published {} to topic {}", counter, topic);
         counter += 1;
         thread::sleep(Duration::from_millis(delay));
     }

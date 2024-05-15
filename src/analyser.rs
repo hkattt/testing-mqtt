@@ -9,7 +9,7 @@ pub async fn main_analyser(hostname: &str, port: u16, analyser_qos: QoS, instanc
 
     let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port);
     
-    let publisher_topic = publisher_topic_string(instancecount, analyser_qos, delay);
+    let publisher_topic = publisher_topic_string(instancecount, qos, delay);
 
     // Subscribe to the publisher topic
     if let Err(error) = analyser.subscribe(&publisher_topic, analyser_qos).await {

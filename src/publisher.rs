@@ -24,6 +24,7 @@ pub async fn main_publisher(publisher_id: u16, hostname: &str, port: u16) {
         }
 
         if let Ok(event) = eventloop.poll().await {
+            println!("{:?}", event);
             match event {
                 Event::Incoming(Packet::Publish(publish)) => {
                     // Receive instancecount 

@@ -1,6 +1,9 @@
+mod analyser;
+mod publisher;
+
 use std::time::{Duration, SystemTime};
 
-use rumqttc::{AsyncClient, ClientError, Event, EventLoop, Incoming, MqttOptions, QoS};
+use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, QoS};
 use std::thread;
 
 #[tokio::main]
@@ -16,7 +19,7 @@ async fn main() {
     println!("Spawning analyser task");
 
     let analyser_task = tokio::spawn(
-        main_analyser(hostname, port, instancecount, qos, delay)
+        analyser::main_analyser(hostname, port, instancecount, qos, delay)
     );
 
     println!("Spawning publisher tasks");
@@ -25,7 +28,7 @@ async fn main() {
     for pub_id in 1..=1 {
         pub_tasks.push(
             tokio::spawn(
-                main_publisher(pub_id, hostname, port, instancecount, qos, delay)
+                publisher::main_publisher(pub_id, hostname, port, instancecount, qos, delay)
             )
         );
     }
@@ -36,58 +39,6 @@ async fn main() {
     analyser_task.await.unwrap();
     for pub_task in pub_tasks {
         pub_task.await.unwrap();
-    }
-}
-
-async fn main_analyser(hostname: &str, port: u16, instancecount: u8, qos: QoS, delay: u64) {
-    let analyser_id = "analyser";
-
-    let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port);
-
-    println!("Successfull MQTT connection: {}", analyser_id);
-
-    let topic = publisher_topic_string(instancecount, qos, delay);
-
-    if let Err(error) = analyser.subscribe(&topic, qos).await {
-        eprintln!("Analyser unable to subscribe to topic {} with error: {}", topic, error);
-        return;
-    }
-
-    println!("Analyser successfully subscribed to topic {}", topic);
-
-    while let Ok(event) = eventloop.poll().await {
-        match event {
-            Event::Incoming(packet) => {
-                if let rumqttc::Packet::Publish(publish) = packet {
-                    if publish.topic == topic {
-                        println!("Received message: {:?} on topic {}", publish.payload, topic);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-async fn main_publisher(pub_id: u16, hostname: &str, port: u16, instancecount: u8, qos: QoS, delay: u64) {
-    let pub_id = format!("client{}", pub_id);
-    // TODO: Create unique ID
-    let (publisher, _eventloop) = create_mqtt_conn(&pub_id, hostname, port);
-
-    println!("Successfull MQTT connection: {}", pub_id);
-
-    let topic = publisher_topic_string(instancecount, qos, delay);
-
-    if let Err(error) = publisher.subscribe(&topic, qos).await {
-        eprintln!("Publisher unable to subscribe to topic {} with error: {}", topic, error);
-        return;
-    }
-
-    println!("Publisher successfully subscribed to topic {}", topic);
-
-    if let Err(error) = publish_counter(publisher, &topic, qos, delay).await {
-        eprintln!("Error occured publishing counter: {}", error);
-        return;
     }
 }
 

@@ -1,28 +1,26 @@
-use std::time::Duration;
-use rumqttc::{MqttOptions, AsyncClient, Event, Packet, QoS};
+use rumqttc::{Event, Packet, QoS};
+
+use crate::{create_mqtt_conn, publisher_topic_string};
 
 pub async fn main_analyser(hostname: &str, port: u16, instancecount: u8, qos: QoS, delay: u64) {
-    // Create MQTT options and client
-    let mut mqtt_options = MqttOptions::new("analyser", hostname, port);
-    mqtt_options.set_keep_alive(Duration::from_secs(5));
-    mqtt_options.set_clean_session(true);
+    let analyser_id = "analyser";
 
-    let (mut client, mut eventloop) = AsyncClient::new(mqtt_options, 10);
+    let (client, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port);
     
-    let topic = "example";
+    let publisher_topic = publisher_topic_string(instancecount, qos, delay);
 
     // Subscribe to the topic
-    client.subscribe(topic, QoS::AtLeastOnce).await.unwrap();
+    client.subscribe(&publisher_topic, qos).await.unwrap();
 
-    println!("Analyser subscribed to topic: {}", topic);
+    println!("{} subscribed to publisher topic: {}", analyser_id, publisher_topic);
 
     // Event loop to handle incoming messages
     while let Ok(event) = eventloop.poll().await {
         match event {
             Event::Incoming(Packet::Publish(publish)) => {
                 // Print the payload of the incoming message
-                if publish.topic == topic {
-                    println!("Received: {:?}", publish.payload);
+                if publish.topic == publisher_topic {
+                    println!("{} received {:?} on {}", analyser_id, publish.payload, publisher_topic);
                 }
             }
             _ => {}

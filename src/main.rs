@@ -1,10 +1,9 @@
 mod analyser;
 mod publisher;
 
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
-use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, QoS};
-use std::thread;
+use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
 
 #[tokio::main]
 async fn main() {
@@ -49,19 +48,6 @@ fn create_mqtt_conn(client_id: &str, hostname: &str, port: u16) -> (AsyncClient,
 
     // Create MQTT client and connection 
     AsyncClient::new(options, 10)
-}
-
-async fn publish_counter(client: AsyncClient, topic: &str, qos: QoS, delay: u64) -> Result<(), ClientError>{
-    let mut counter = 0;
-    let start_time = SystemTime::now();
-
-    while start_time.elapsed().unwrap().as_secs() < 60 {
-        client.publish(topic, qos, false, counter.to_string()).await?;
-        println!("Publisher successfully published {} to topic {}", counter, topic);
-        counter += 1;
-        thread::sleep(Duration::from_millis(delay));
-    }
-    Ok(())
 }
 
 fn publisher_topic_string(instancecount: u8, qos: QoS, delay: u64) -> String {

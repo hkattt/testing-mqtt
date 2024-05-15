@@ -1,32 +1,26 @@
-use std::time::Duration;
-use tokio::{task, time};
-use rumqttc::{MqttOptions, AsyncClient, QoS};
+use tokio::task;
+use rumqttc::QoS;
 
-pub async fn main_publisher(pub_id: u16, hostname: &str, port: u16, instancecount: u8, qos: QoS, delay: u64) {
-    // Broker details
-    let hostname = "localhost";
-    let port = 1883;
+use crate::{create_mqtt_conn, publisher_topic_string};
 
-    // Create MQTT options and client
-    let mut mqtt_options = MqttOptions::new("publisher", hostname, port);
-    mqtt_options.set_keep_alive(Duration::from_secs(5));
+pub async fn main_publisher(publisher_id: u16, hostname: &str, port: u16, instancecount: u8, qos: QoS, delay: u64) {
+    let publisher_id = format!("publisher{}", publisher_id);
 
-    let (client, mut eventloop) = AsyncClient::new(mqtt_options, 10);
-    client.subscribe("someothertopic", QoS::AtLeastOnce).await.unwrap();
+    let (publisher, mut eventloop) = create_mqtt_conn(&publisher_id, hostname, port);
 
-    let topic = "example";
+    let publisher_topic = publisher_topic_string(instancecount, qos, delay);
 
     let start = std::time::Instant::now();
 
-    let counter_task = task::spawn(async move {
-        for i in 0.. {
+    task::spawn(async move {
+        for counter in 0.. {
             // Publish the counter value
-            client.publish(topic, QoS::AtLeastOnce, false, i.to_string())
-                .await
-                .unwrap();
-            println!("Publisher published {} to topic: {}", i.to_string(), topic);
-            // Wait for a short duration before publishing the next message
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            if let Err(error) = publisher.publish(&publisher_topic, qos, false, counter.to_string()).await {
+                eprintln!("{} failed to publish {} to {} with error: {}", publisher_id, counter, publisher_topic, error);
+            } else {
+                println!("{} successfully published {} to topic: {}", publisher_id, counter, publisher_topic);
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
         }
     });
 

@@ -14,8 +14,8 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16) {
     let publisher = Arc::new(publisher);
 
     // Subscribe to instancecount, qos, and delay topics
-    // TODO: What QoS should we use here?
-    subscribe_to_topics(&publisher, &publisher_id, QoS::AtLeastOnce).await.unwrap_or_else(|_| return);
+    // Use the highest level of QoS to ensure delivery. Need to receive the experiment parameters
+    subscribe_to_topics(&publisher, &publisher_id, QoS::ExactlyOnce).await.unwrap_or_else(|_| return);
 
     loop {
         // Receive instancecount, qos, and delay from the analyser

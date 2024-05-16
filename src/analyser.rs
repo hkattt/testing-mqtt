@@ -4,10 +4,11 @@ use tokio::task;
 use rumqttc::{AsyncClient, EventLoop, Event, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 
-use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, SEND_DURATION};
-use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC};
+use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8};
+use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
+use crate::experiment::ExperimentResult;
 
-pub async fn main_analyser(hostname: &str, port: u16, analyser_qos: QoS) {
+pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
     let analyser_id = "analyser";
 
     // 1 to 5 publishers
@@ -20,27 +21,54 @@ pub async fn main_analyser(hostname: &str, port: u16, analyser_qos: QoS) {
     let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port);
     let analyser = Arc::new(analyser);
 
-    for instancecount in instancecounts {
-        for qos in qoss {
-            for delay in delays {
-                println!(
-                    "\nANALYSER STARTING COMBINATION
-                    instancecount: {}
-                    qos: {}
-                    delay: {}ms\n",
-                    instancecount,
-                    qos_to_u8(qos),
-                    delay
-                );
-                analyse_combination(&analyser, &mut eventloop, analyser_id, analyser_qos, instancecount, qos, delay).await;
+    let mut experiment_results = Vec::new();
+
+    for analyser_qos in qoss {
+        for instancecount in instancecounts {
+            for publisher_qos in qoss {
+                for delay in delays {
+                    println!(
+                        "\nANALYSER STARTING EXPERIMENT
+                        analyser qos: {}
+                        instancecount: {}
+                        publisher qos: {}
+                        delay: {}ms\n",
+                        qos_to_u8(analyser_qos),
+                        instancecount,
+                        qos_to_u8(publisher_qos),
+                        delay
+                    );
+
+                    // Conduct experiment
+                    let experiment_result = 
+                        conduct_experiment(&analyser, 
+                                &mut eventloop, 
+                                analyser_id, 
+                                analyser_qos, 
+                                instancecount, 
+                                publisher_qos, 
+                                delay)
+                                .await;
+                    
+                    // Record experiment result
+                    experiment_results.push(experiment_result);
+                }
             }
         }
     }
+    experiment_results
 }
 
-async fn analyse_combination(analyser: &Arc<AsyncClient>, eventloop: &mut EventLoop, analyser_id: &str, analyser_qos: QoS, instancecount: u8, qos: QoS, delay: u64) {
+async fn conduct_experiment(
+        analyser: &Arc<AsyncClient>, 
+        eventloop: &mut EventLoop, 
+        analyser_id: &str, 
+        analyser_qos: QoS, 
+        instancecount: u8, 
+        publisher_qos: QoS, 
+        delay: u64) -> ExperimentResult {
     
-    let publisher_topic = publisher_topic_string(instancecount, qos, delay);
+    let publisher_topic = publisher_topic_string(instancecount, publisher_qos, delay);
 
     // Subscribe to the publisher topic
     if let Err(error) = analyser.subscribe(&publisher_topic, analyser_qos).await {
@@ -62,11 +90,11 @@ async fn analyse_combination(analyser: &Arc<AsyncClient>, eventloop: &mut EventL
         }
 
         // // Publish the qos
-        let qos = qos_to_u8(qos);        
-        if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, qos.to_be_bytes()).await {
-            debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, qos, QOS_TOPIC, error);
+        let publisher_qos = qos_to_u8(publisher_qos);        
+        if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, publisher_qos.to_be_bytes()).await {
+            debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, publisher_qos, QOS_TOPIC, error);
         } else {
-            debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, qos, QOS_TOPIC);
+            debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, publisher_qos, QOS_TOPIC);
         }
 
         // // Publish the delay
@@ -76,6 +104,11 @@ async fn analyse_combination(analyser: &Arc<AsyncClient>, eventloop: &mut EventL
             debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, delay, DELAY_TOPIC);
         }
     });
+
+    let message_rate: f64 = 0.0;
+    let loss_rate: f64 = 0.0;
+    let out_of_order_rate: f64 = 0.0;
+    let inter_message_gap: f64 = 0.0;
 
     let start = std::time::Instant::now();
 
@@ -94,4 +127,5 @@ async fn analyse_combination(analyser: &Arc<AsyncClient>, eventloop: &mut EventL
             break;
         }
     }
+    ExperimentResult::new(format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), message_rate, loss_rate, out_of_order_rate, inter_message_gap)
 }

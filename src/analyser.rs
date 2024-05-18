@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::task;
 use rumqttc::{AsyncClient, EventLoop, Event, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
+use chrono::{Local, Timelike};
 
 use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, CURRENT_SIZE_TOPIC, CONNECTIONS_TOPIC, MAX_SIZE_TOPIC, INFLIGHT_TOPIC, DROPPED_TOPIC, CLIENTS_CONNECTED_TOPIC, SEND_DURATION};
@@ -31,12 +32,17 @@ pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
                     // Small delay to allow the publishers to get ready
                     tokio::time::sleep(Duration::from_secs(1)).await;
 
+                    // Get the current local time
+                    let local_time = Local::now();
+
                     println!(
-                        "\nANALYSER STARTING EXPERIMENT
-                        analyser qos: {}
-                        instancecount: {}
-                        publisher qos: {}
-                        delay: {}ms\n",
+                        "\n[{:02}h:{:02}m:{:02}s]\n\
+                        ANALYSER STARTING EXPERIMENT\n\
+                        \tanalyser qos: {}\n\
+                        \tinstancecount: {}\n\
+                        \tpublisher qos: {}\n\
+                        \tdelay: {}ms\n",
+                        local_time.time().hour(), local_time.time().minute(), local_time.time().second(),
                         qos_to_u8(analyser_qos),
                         instancecount,
                         qos_to_u8(publisher_qos),

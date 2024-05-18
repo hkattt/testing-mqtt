@@ -31,15 +31,9 @@ impl ExperimentResult {
 }
 
 pub fn save(experiment_results: Vec<ExperimentResult>) -> io::Result<()> {
-    let file = match File::open(RESULT_FILE) {
+    let file = match File::create(RESULT_FILE) {
         Ok(file) => file,
-        Err(error) => match error.kind() {
-            std::io::ErrorKind::NotFound => match File::create(RESULT_FILE) {
-                Ok(file) => file, 
-                Err(error) => return Err(error),
-            }
-            _ => return Err(error),
-        }
+        Err(error) => return Err(error),
     };
 
     let mut writer = Writer::from_writer(file);
@@ -58,6 +52,5 @@ pub fn save(experiment_results: Vec<ExperimentResult>) -> io::Result<()> {
             ]
         )?;
     }
-    // TODO: Actually hanlde errors
     Ok(())
 }

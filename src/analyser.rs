@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::task;
 use rumqttc::{AsyncClient, EventLoop, Event, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 use chrono::{Local, Timelike};
+use tokio::task;
 
 use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, CURRENT_SIZE_TOPIC, CONNECTIONS_TOPIC, MAX_SIZE_TOPIC, INFLIGHT_TOPIC, DROPPED_TOPIC, CLIENTS_CONNECTED_TOPIC, SEND_DURATION};
@@ -20,7 +20,7 @@ pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
     // 0ms, 1ms, 2ms, 4ms message delay
     let delays = [0, 1, 2, 4];
 
-    let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port);
+    let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port, Duration::from_secs(1));
     let analyser = Arc::new(analyser);
 
     let mut experiment_results = Vec::new();
@@ -29,9 +29,6 @@ pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
         for instancecount in instancecounts {
             for publisher_qos in qoss {
                 for delay in delays {
-                    // Small delay to allow the publishers to get ready
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-
                     // Get the current local time
                     let local_time = Local::now();
 
@@ -128,10 +125,9 @@ async fn conduct_experiment(
     // let max_heap_size: u64 = 0;
     // let connections: u64 = 0;
 
-    println!("{} starting timer", analyser_id);
     let start = std::time::Instant::now();
     // Event loop to handle incoming messages
-    while start.elapsed().as_secs() <= SEND_DURATION {
+    while start.elapsed().as_secs() <= SEND_DURATION.as_secs() {
         if let Ok(event) = eventloop.poll().await {
             match event {
                 Event::Incoming(Packet::Publish(publish)) => {

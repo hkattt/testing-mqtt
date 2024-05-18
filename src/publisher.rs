@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tokio::task;
 use rumqttc::{AsyncClient, Event, EventLoop, Packet, QoS};
@@ -10,7 +11,7 @@ use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
 pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, running: Arc<Mutex<bool>>) {
     let publisher_id = format!("pub-{}", publisher_index);
 
-    let (publisher, mut eventloop) = create_mqtt_conn(&publisher_id, hostname, port);
+    let (publisher, mut eventloop) = create_mqtt_conn(&publisher_id, hostname, port, Duration::from_secs(5));
     let publisher = Arc::new(publisher);
 
     // Subscribe to instancecount, qos, and delay topics
@@ -20,6 +21,8 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, runn
         return;
     }
 
+    // Publishers keep running until they are signaled to stop
+    // This will occur when the analyser finishes
     while *running.lock().unwrap() {
         // Receive instancecount, qos, and delay from the analyser
         let (instancecount, qos, delay) = match receive_topic_values(&mut eventloop, &publisher_id).await {
@@ -50,7 +53,7 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, runn
 async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_topic: &str, qos: QoS, delay: u64) {
     let mut counter = 0;
     let start = std::time::Instant::now();
-    while start.elapsed().as_secs() > SEND_DURATION {
+    while start.elapsed().as_secs() > SEND_DURATION.as_secs() {
         // Publish the counter value
         if let Err(error) = publisher.publish(publisher_topic, qos, false, counter.to_string()).await {
             debug_eprintln!("{} failed to publish {} to {} with error: {}", publisher_id, counter, publisher_topic, error);

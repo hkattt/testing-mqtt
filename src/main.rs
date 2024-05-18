@@ -27,7 +27,7 @@ const CLIENTS_CONNECTED_TOPIC: &str = "$SYS/broker/clients/connected";
 const RESULT_FILE: &str             = "experiment-results.csv";
 
 // Publisher send duration (seconds)
-const SEND_DURATION: u64            = 1; 
+const SEND_DURATION: Duration       = Duration::from_secs(0); 
 // Maximum number of publishers 
 const NPUBLISHERS: u8               = 5;
 
@@ -49,7 +49,7 @@ async fn main() {
         \tmaximum number of publishers: {}\n",
         HOSTNAME,
         PORT,
-        SEND_DURATION,
+        SEND_DURATION.as_secs(),
         NPUBLISHERS
     );
 
@@ -78,19 +78,19 @@ async fn main() {
 
     // Save experiment results
     if let Err(error) = experiment::save(experiment_results) {
-        eprintln!("Unable to save experiment results: {}", error);
+        eprintln!("Unable to save experiment results: {}\n", error);
         return;
     } else {
-        println!("Saved experiment results to {}", RESULT_FILE);
+        println!("Saved experiment results to {}\n", RESULT_FILE);
     }
 
     println!("EXPERIMENTS COMPLETED");
 }
 
-fn create_mqtt_conn(client_id: &str, hostname: &str, port: u16) -> (AsyncClient, EventLoop) {
+fn create_mqtt_conn(client_id: &str, hostname: &str, port: u16, keep_alive: Duration) -> (AsyncClient, EventLoop) {
     // Create MQTT options
     let mut options = MqttOptions::new(client_id, hostname, port);
-    options.set_keep_alive(Duration::from_secs(5));
+    options.set_keep_alive(keep_alive);
     options.set_clean_session(true);
 
     // Create MQTT client and connection 

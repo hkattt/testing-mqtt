@@ -86,29 +86,27 @@ async fn conduct_experiment(
     let analyser_clone = Arc::clone(&analyser);
     let analyser_id_clone = analyser_id.to_string();
 
-    task::spawn(async move {
-        // Publish the instancecount
-        if let Err(error) = analyser_clone.publish(INSTANCECOUNT_TOPIC, analyser_qos, false, instancecount.to_be_bytes()).await {
-            debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, instancecount, INSTANCECOUNT_TOPIC, error);
-        } else {
-            debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, instancecount, INSTANCECOUNT_TOPIC);
-        }
-    
-        // Publish the qos
-        let publisher_qos = qos_to_u8(publisher_qos);        
-        if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, publisher_qos.to_be_bytes()).await {
-            debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, publisher_qos, QOS_TOPIC, error);
-        } else {
-            debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, publisher_qos, QOS_TOPIC);
-        }
-    
-        // Publish the delay
-        if let Err(error) = analyser_clone.publish(DELAY_TOPIC, analyser_qos, false, delay.to_be_bytes()).await {
-            debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, delay, DELAY_TOPIC, error);
-        } else {
-            debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, delay, DELAY_TOPIC);
-        }
-    });
+    // Publish the instancecount
+    if let Err(error) = analyser_clone.publish(INSTANCECOUNT_TOPIC, analyser_qos, false, instancecount.to_be_bytes()).await {
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, instancecount, INSTANCECOUNT_TOPIC, error);
+    } else {
+        debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, instancecount, INSTANCECOUNT_TOPIC);
+    }
+
+    // Publish the qos
+    let publisher_qos = qos_to_u8(publisher_qos);        
+    if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, publisher_qos.to_be_bytes()).await {
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, publisher_qos, QOS_TOPIC, error);
+    } else {
+        debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, publisher_qos, QOS_TOPIC);
+    }
+
+    // Publish the delay
+    if let Err(error) = analyser_clone.publish(DELAY_TOPIC, analyser_qos, false, delay.to_be_bytes()).await {
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, delay, DELAY_TOPIC, error);
+    } else {
+        debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, delay, DELAY_TOPIC);
+    }
 
     if subscribe_to_topics(analyser, analyser_id, analyser_qos, &topics).await.is_err() {
         return ExperimentResult::new(

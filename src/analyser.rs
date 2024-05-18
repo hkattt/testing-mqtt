@@ -130,48 +130,47 @@ async fn conduct_experiment(
     // let max_heap_size: u64 = 0;
     // let connections: u64 = 0;
 
+    println!("{} starting timer", analyser_id);
     let start = std::time::Instant::now();
-
     // Event loop to handle incoming messages
-    while let Ok(event) = eventloop.poll().await {
-        if start.elapsed().as_secs() > SEND_DURATION {
-            break;
-        } 
-        match event {
-            Event::Incoming(Packet::Publish(publish)) => {
-                // Print the payload of the incoming message
-                if publish.topic == publisher_topic {
-                    debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publisher_topic);
+    while start.elapsed().as_secs() <= SEND_DURATION {
+        if let Ok(event) = eventloop.poll().await {
+            match event {
+                Event::Incoming(Packet::Publish(publish)) => {
+                    // Print the payload of the incoming message
+                    if publish.topic == publisher_topic {
+                        debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publisher_topic);
+                    }
+                    else if publish.topic == CURRENT_SIZE_TOPIC {
+                        // TODO: Make debug print
+                        debug_println!("Current heap size: {:?}", publish.payload);
+                    }
+                    else if publish.topic == MAX_SIZE_TOPIC {
+                        // TODO: Make debug print
+                        debug_println!("Maximum heap size: {:?}", publish.payload);
+                    }
+                    else if publish.topic == CONNECTIONS_TOPIC {
+                        // TODO: Make debug print
+                        debug_println!("Current heap size: {:?}", publish.payload);
+                    }
+                    else if publish.topic == INFLIGHT_TOPIC {
+                        // TODO: Make debug print
+                        debug_println!("Number of inflight messages: {:?}", publish.payload);
+                    }
+                    else if publish.topic == DROPPED_TOPIC {
+                        // TODO: Make debug print
+                        debug_println!("Number of dropped messages: {:?}", publish.payload);
+                    }
+                    else if publish.topic == CLIENTS_CONNECTED_TOPIC {
+                        // TODO: Make debug print
+                        debug_println!("Number of clients messages: {:?}", publish.payload);
+                    }
                 }
-                else if publish.topic == CURRENT_SIZE_TOPIC {
-                    // TODO: Make debug print
-                    debug_println!("Current heap size: {:?}", publish.payload);
-                }
-                else if publish.topic == MAX_SIZE_TOPIC {
-                    // TODO: Make debug print
-                    debug_println!("Maximum heap size: {:?}", publish.payload);
-                }
-                else if publish.topic == CONNECTIONS_TOPIC {
-                    // TODO: Make debug print
-                    debug_println!("Current heap size: {:?}", publish.payload);
-                }
-                else if publish.topic == INFLIGHT_TOPIC {
-                    // TODO: Make debug print
-                    debug_println!("Number of inflight messages: {:?}", publish.payload);
-                }
-                else if publish.topic == DROPPED_TOPIC {
-                    // TODO: Make debug print
-                    debug_println!("Number of dropped messages: {:?}", publish.payload);
-                }
-                else if publish.topic == CLIENTS_CONNECTED_TOPIC {
-                    // TODO: Make debug print
-                    debug_println!("Number of clients messages: {:?}", publish.payload);
-                }
+                _ => {}
             }
-            _ => {}
         }
     }
-    
+
     ExperimentResult::new(
         format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), 
         message_rate, 

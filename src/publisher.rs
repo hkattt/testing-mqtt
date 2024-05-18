@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use tokio::task;
-use rumqttc::{AsyncClient, ClientError, Event, EventLoop, Packet, QoS};
+use rumqttc::{AsyncClient, Event, EventLoop, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 
-use crate::{create_mqtt_conn, publisher_topic_string, u8_to_qos, qos_to_u8};
+use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics, u8_to_qos};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
 
 pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16) {
@@ -15,7 +15,10 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16) {
 
     // Subscribe to instancecount, qos, and delay topics
     // Use the highest level of QoS to ensure delivery. Need to receive the experiment parameters
-    subscribe_to_topics(&publisher, &publisher_id, QoS::ExactlyOnce).await.unwrap_or_else(|_| return);
+    let topics = [INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC];
+    if subscribe_to_topics(&publisher, &publisher_id, QoS::ExactlyOnce, &topics).await.is_err() {
+        return;
+    }
 
     loop {
         // Receive instancecount, qos, and delay from the analyser
@@ -32,7 +35,7 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16) {
 
         let counter_task = task::spawn(async move {
             if publisher_index <= instancecount {
-                println!("{} publishing to {} using instancecount: {}, qos: {:?}, and delay: {}", 
+                debug_println!("{} publishing to {} using instancecount: {}, qos: {:?}, and delay: {}", 
                     publisher_id_clone, publisher_topic, instancecount, qos_to_u8(qos), delay);
                 publish_counter(&publisher_clone, &publisher_id_clone, &publisher_topic, qos, delay).await;
             }
@@ -61,33 +64,6 @@ async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_
         } 
     }
 } 
-
-async fn subscribe_to_topics(publisher: &AsyncClient, publisher_id: &str, qos: QoS) -> Result<(), ClientError> {
-    // Subscribe to the instancecount topic
-    if let Err(error) = publisher.subscribe(INSTANCECOUNT_TOPIC, qos).await {
-        debug_eprintln!("{} failed to subscribe to topic {} with error: {}", publisher_id, INSTANCECOUNT_TOPIC, error);
-        return Err(error);
-    } else {
-        debug_println!("{} subscribed to topic: {}", publisher_id, INSTANCECOUNT_TOPIC);
-    }
-
-    // Subscribe to the instancecount topic
-    if let Err(error) = publisher.subscribe(QOS_TOPIC, qos).await {
-        debug_eprintln!("{} failed to subscribe to topic {} with error: {}", publisher_id, QOS_TOPIC, error);
-        return Err(error);
-    } else {
-        debug_println!("{} subscribed to topic: {}", publisher_id, QOS_TOPIC);
-    }
-
-    // Subscribe to the instancecount topic
-    if let Err(error) = publisher.subscribe(DELAY_TOPIC, qos).await {
-        debug_eprintln!("{} failed to subscribe to topic {} with error: {}", publisher_id, DELAY_TOPIC, error);
-        return Err(error);
-    } else {
-        debug_println!("{} subscribed to topic: {}", publisher_id, DELAY_TOPIC);
-    }
-    Ok(())
-}
 
 async fn receive_topic_values(eventloop: &mut EventLoop, publisher_id: &str) -> Option<(u8, QoS, u64)> {
     let mut instancecount = None;

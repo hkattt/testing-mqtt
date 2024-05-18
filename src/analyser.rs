@@ -1,11 +1,12 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::task;
 use rumqttc::{AsyncClient, EventLoop, Event, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 
-use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8};
-use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
+use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics};
+use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, CURRENT_SIZE_TOPIC, CONNECTIONS_TOPIC, MAX_SIZE_TOPIC, INFLIGHT_TOPIC, DROPPED_TOPIC, CLIENTS_CONNECTED_TOPIC, SEND_DURATION};
 use crate::experiment::ExperimentResult;
 
 pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
@@ -27,6 +28,8 @@ pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
         for instancecount in instancecounts {
             for publisher_qos in qoss {
                 for delay in delays {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+
                     println!(
                         "\nANALYSER STARTING EXPERIMENT
                         analyser qos: {}
@@ -69,14 +72,9 @@ async fn conduct_experiment(
         delay: u64) -> ExperimentResult {
     
     let publisher_topic = publisher_topic_string(instancecount, publisher_qos, delay);
-
-    // Subscribe to the publisher topic
-    if let Err(error) = analyser.subscribe(&publisher_topic, analyser_qos).await {
-        debug_eprintln!("{} failed to subscribe to publisher topic {} with error: {}", analyser_id, publisher_topic, error);
-    } else {
-        debug_println!("{} subscribed to publisher topic: {}", analyser_id, publisher_topic);
-    }
-
+    
+    let topics = [&publisher_topic, CURRENT_SIZE_TOPIC, MAX_SIZE_TOPIC, CONNECTIONS_TOPIC, INFLIGHT_TOPIC, DROPPED_TOPIC, CLIENTS_CONNECTED_TOPIC];
+    
     // TODO: Improve this?
     let analyser_clone = Arc::clone(&analyser);
     let analyser_id_clone = analyser_id.to_string();
@@ -89,7 +87,7 @@ async fn conduct_experiment(
             debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, instancecount, INSTANCECOUNT_TOPIC);
         }
 
-        // // Publish the qos
+        // Publish the qos
         let publisher_qos = qos_to_u8(publisher_qos);        
         if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, publisher_qos.to_be_bytes()).await {
             debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, publisher_qos, QOS_TOPIC, error);
@@ -97,7 +95,7 @@ async fn conduct_experiment(
             debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, publisher_qos, QOS_TOPIC);
         }
 
-        // // Publish the delay
+        // Publish the delay
         if let Err(error) = analyser_clone.publish(DELAY_TOPIC, analyser_qos, false, delay.to_be_bytes()).await {
             debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, delay, DELAY_TOPIC, error);
         } else {
@@ -105,10 +103,25 @@ async fn conduct_experiment(
         }
     });
 
+    if subscribe_to_topics(analyser, analyser_id, analyser_qos, &topics).await.is_err() {
+        return ExperimentResult::new(
+            format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), 
+            -1.0, 
+            -1.0, 
+            -1.0, 
+            -1.0
+        );
+    }
+
     let message_rate: f64 = 0.0;
     let loss_rate: f64 = 0.0;
     let out_of_order_rate: f64 = 0.0;
     let inter_message_gap: f64 = 0.0;
+
+    // $SYS Measurements
+    // let average_heap_size: u64 = 0;
+    // let max_heap_size: u64 = 0;
+    // let connections: u64 = 0;
 
     let start = std::time::Instant::now();
 
@@ -120,6 +133,30 @@ async fn conduct_experiment(
                 if publish.topic == publisher_topic {
                     debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publisher_topic);
                 }
+                else if publish.topic == CURRENT_SIZE_TOPIC {
+                    // TODO: Make debug print
+                    debug_println!("Current heap size: {:?}", publish.payload);
+                }
+                else if publish.topic == MAX_SIZE_TOPIC {
+                    // TODO: Make debug print
+                    debug_println!("Maximum heap size: {:?}", publish.payload);
+                }
+                else if publish.topic == CONNECTIONS_TOPIC {
+                    // TODO: Make debug print
+                    debug_println!("Current heap size: {:?}", publish.payload);
+                }
+                else if publish.topic == INFLIGHT_TOPIC {
+                    // TODO: Make debug print
+                    debug_println!("Number of inflight messages: {:?}", publish.payload);
+                }
+                else if publish.topic == DROPPED_TOPIC {
+                    // TODO: Make debug print
+                    debug_println!("Number of dropped messages: {:?}", publish.payload);
+                }
+                else if publish.topic == CLIENTS_CONNECTED_TOPIC {
+                    // TODO: Make debug print
+                    debug_println!("Number of clients messages: {:?}", publish.payload);
+                }
             }
             _ => {}
         }
@@ -127,5 +164,11 @@ async fn conduct_experiment(
             break;
         }
     }
-    ExperimentResult::new(format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), message_rate, loss_rate, out_of_order_rate, inter_message_gap)
+    ExperimentResult::new(
+        format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), 
+        message_rate, 
+        loss_rate, 
+        out_of_order_rate, 
+        inter_message_gap
+    )
 }

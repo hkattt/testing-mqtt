@@ -4,23 +4,32 @@ mod experiment;
 
 use std::time::Duration;
 
-use rumqttc::{AsyncClient, EventLoop, MqttOptions, QoS};
+use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, QoS};
+use::debug_print::{debug_println, debug_eprintln};
 
 // Broker details
-const HOSTNAME: &str            = "localhost";
-const PORT: u16                 = 1883;
+const HOSTNAME: &str                = "localhost";
+const PORT: u16                     = 1883;
 
-// MQQT Topics
-const INSTANCECOUNT_TOPIC: &str = "request/instancecount";
-const QOS_TOPIC: &str           = "request/qos";
-const DELAY_TOPIC: &str         = "request/delay";
+// MQQT topics
+const INSTANCECOUNT_TOPIC: &str     = "request/instancecount";
+const QOS_TOPIC: &str               = "request/qos";
+const DELAY_TOPIC: &str             = "request/delay";
 
-const RESULT_FILE: &str         = "experiment-results.csv";
+// Mosquitto $SYS topics
+const CURRENT_SIZE_TOPIC: &str      = "$SYS/broker/heap/current size";
+const MAX_SIZE_TOPIC: &str          = "$SYS/broker/heap/maximum size";
+const CONNECTIONS_TOPIC: &str       = "$SYS/broker/load/connections/1min";
+const INFLIGHT_TOPIC: &str          = "$SYS/broker/messages/inflight";
+const DROPPED_TOPIC: &str           = "$SYS/broker/publish/messages/dropped";
+const CLIENTS_CONNECTED_TOPIC: &str = "$SYS/broker/clients/connected";
+
+const RESULT_FILE: &str             = "experiment-results.csv";
 
 // Publisher send duration (seconds)
-const SEND_DURATION: u64        = 0; 
+const SEND_DURATION: u64            = 0; 
 // Maximum number of publishers 
-const NPUBLISHERS: u8           = 5;
+const NPUBLISHERS: u8               = 5;
 
 /**
  * TODO:
@@ -85,6 +94,20 @@ fn create_mqtt_conn(client_id: &str, hostname: &str, port: u16) -> (AsyncClient,
 
     // Create MQTT client and connection 
     AsyncClient::new(options, 10)
+}
+
+async fn subscribe_to_topics(client: &AsyncClient, client_id: &str, qos: QoS, topics: &[&str]) -> Result<(), ClientError>{
+    for topic in topics {
+        if let Err(error) = client.subscribe(*topic, qos).await {
+            // TODO: Replace with debug prints
+            debug_eprintln!("{} failed to subscribe to topic {} with error: {}", client_id, topic, error);
+            return Err(error);
+        } else {
+            // TODO: Replace with debug prints
+            debug_println!("{} subscribed to topic: {}", client_id, topic);
+        }
+    }
+    Ok(())
 }
 
 fn publisher_topic_string(instancecount: u8, qos: QoS, delay: u64) -> String {

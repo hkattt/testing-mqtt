@@ -24,10 +24,10 @@ const INFLIGHT_TOPIC: &str          = "$SYS/broker/messages/inflight";
 const DROPPED_TOPIC: &str           = "$SYS/broker/publish/messages/dropped";
 const CLIENTS_CONNECTED_TOPIC: &str = "$SYS/broker/clients/connected";
 
-const RESULT_FILE: &str             = "experiment-results.csv";
+const EXPERIMENT_DIR: &str          = "experiment-results";
 
 // Publisher send duration (seconds)
-const SEND_DURATION: Duration       = Duration::from_secs(0); 
+const SEND_DURATION: Duration       = Duration::from_secs(1); 
 // Maximum number of publishers 
 const NPUBLISHERS: u8               = 5;
 
@@ -81,7 +81,7 @@ async fn main() {
         eprintln!("Unable to save experiment results: {}\n", error);
         return;
     } else {
-        println!("Saved experiment results to {}\n", RESULT_FILE);
+        println!("Saved experiment results to the {} directory\n", EXPERIMENT_DIR);
     }
 
     println!("EXPERIMENTS COMPLETED");
@@ -111,8 +111,24 @@ async fn subscribe_to_topics(client: &AsyncClient, client_id: &str, qos: QoS, to
     Ok(())
 }
 
-fn publisher_topic_string(instancecount: u8, qos: QoS, delay: u64) -> String {
-    format!("counter/{}/{}/{}", instancecount, qos_to_u8(qos), delay)
+fn publisher_topic_string(instance: u8, qos: QoS, delay: u64) -> String {
+    format!("counter/{}/{}/{}", instance, qos_to_u8(qos), delay)
+}
+
+fn publisher_topic_instance(publisher_topic: &str) -> Option<usize> {
+    let parts: Vec<&str> = publisher_topic.split('/').collect();
+
+    if let Some(instance_str) = parts.get(1) {
+        if let Ok(instance) = instance_str.parse::<usize>() {
+            return Some(instance);
+        } else {
+            debug_eprintln!("The second part of the publisher topic string cannot be parsed into an integer");
+            return None;
+        }
+    } else {
+        debug_eprintln!("The publisher topic string has no second part");
+        return None;
+    }
 }
 
 fn qos_to_u8(qos: QoS) -> u8 {

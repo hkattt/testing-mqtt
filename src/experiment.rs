@@ -1,56 +1,109 @@
-use std::fs::File;
-use std::io;
+use std::fs::{self, File};
+use std::io::{self, ErrorKind};
+use std::path::Path;
 use csv::Writer;
 
-use crate::RESULT_FILE;
+use crate::EXPERIMENT_DIR;
 
-pub struct ExperimentResult {
-    id: String,
-    message_rate: f64,
-    loss_rate: f64,
-    out_of_order_rate: f64,
+#[derive(Default)]
+pub struct TopicResult {
+    topic: String, 
+    message_rate: f64, 
+    loss_rate: f64, 
+    out_of_order_rate: f64, 
     inter_message_gap: f64,
 }
 
-impl ExperimentResult {
+impl TopicResult {
     pub fn new(
-        id: String, 
-        message_rate: f64, 
-        loss_rate: f64, 
+        topic: String, 
+        message_rate: f64,
+        loss_rate: f64,
         out_of_order_rate: f64, 
-        inter_message_gap: f64) -> ExperimentResult 
-    {  
-        ExperimentResult {
-            id,
+        inter_message_gap: f64) -> TopicResult
+    {
+        TopicResult {
+            topic,
             message_rate,
             loss_rate,
             out_of_order_rate,
             inter_message_gap
         }
+    }
+}
+
+pub struct ExperimentResult {
+    analyser_qos: u8,
+    instancecount: u8, 
+    publisher_qos: u8,
+    delay: u64,
+    topic_results: Vec<TopicResult>,
+}
+
+impl ExperimentResult {
+    pub fn new(
+        analyser_qos: u8,
+        instancecount: u8,
+        publisher_qos: u8, 
+        delay: u64,
+        topic_results: Vec<TopicResult>) -> ExperimentResult 
+    {  
+        ExperimentResult {
+            analyser_qos,
+            instancecount,
+            publisher_qos,
+            delay,
+            topic_results,
+        }
     }    
 }
 
 pub fn save(experiment_results: Vec<ExperimentResult>) -> io::Result<()> {
-    let file = match File::create(RESULT_FILE) {
-        Ok(file) => file,
-        Err(error) => return Err(error),
-    };
-
-    let mut writer = Writer::from_writer(file);
-
-    // Write CSV headers
-    writer.write_record(&["", "Message Rate (message/second)", "Loss Rate", "Out-of-order Rate", "Inter-message Gap"])?;
+    // Create output directory to experiment results
+    if let Err(error) = fs::create_dir(Path::new(EXPERIMENT_DIR)) {
+        if error.kind() != ErrorKind::AlreadyExists {
+            return Err(error);
+        }
+    }
 
     for experiment_result in experiment_results.iter() {
+        let result_file = format!(
+            "{}/experiment{}-{}-{}-{}.csv", 
+            EXPERIMENT_DIR, 
+            experiment_result.analyser_qos, experiment_result.instancecount, 
+            experiment_result.publisher_qos, experiment_result.delay
+        );
+
+        let file = match File::create(result_file) {
+            Ok(file) => file,
+            Err(error) => return Err(error),
+        };
+
+        let mut writer = Writer::from_writer(file);
+        
+        save_experiment(&mut writer, experiment_result)?;
+    }
+
+    Ok(())
+}
+
+fn save_experiment(writer: &mut Writer<File>, experiment_result: &ExperimentResult) -> io::Result<()> {
+    writer.write_record(&["Topic", "Message Rate", "Loss Rate", "Out of Order Rate", "Inter Message Gap"])?; 
+    
+    for topic_result in &experiment_result.topic_results {
         writer.write_record(
             &[
-                experiment_result.id.clone(),
-                experiment_result.message_rate.to_string(),
-                experiment_result.loss_rate.to_string(),
-                experiment_result.out_of_order_rate.to_string(),
-                experiment_result.inter_message_gap.to_string(),
+                topic_result.topic.clone(),
+                topic_result.message_rate.to_string(),
+                topic_result.loss_rate.to_string(),
+                topic_result.out_of_order_rate.to_string(),
+                topic_result.inter_message_gap.to_string(),
             ]
         )?;
     }
-    Ok(())
+
+    // Flush the writer to ensure all data is written
+    writer.flush()?;
+
+    Ok(())  
 }

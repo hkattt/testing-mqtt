@@ -4,11 +4,10 @@ use std::time::Duration;
 use rumqttc::{AsyncClient, EventLoop, Event, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 use chrono::{Local, Timelike};
-use tokio::task;
 
-use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics};
+use crate::{create_mqtt_conn, publisher_topic_string, publisher_topic_instance, qos_to_u8, subscribe_to_topics};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, CURRENT_SIZE_TOPIC, CONNECTIONS_TOPIC, MAX_SIZE_TOPIC, INFLIGHT_TOPIC, DROPPED_TOPIC, CLIENTS_CONNECTED_TOPIC, SEND_DURATION};
-use crate::experiment::ExperimentResult;
+use crate::experiment::{ExperimentResult, TopicResult};
 
 pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
     let analyser_id = "analyser";
@@ -91,11 +90,10 @@ async fn conduct_experiment(
     }
 
     // Publish the qos
-    let publisher_qos = qos_to_u8(publisher_qos);        
-    if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, publisher_qos.to_be_bytes()).await {
-        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, publisher_qos, QOS_TOPIC, error);
+    if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, qos_to_u8(publisher_qos).to_be_bytes()).await {
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, qos_to_u8(publisher_qos), QOS_TOPIC, error);
     } else {
-        debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, publisher_qos, QOS_TOPIC);
+        debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, qos_to_u8(publisher_qos), QOS_TOPIC);
     }
 
     // Publish the delay
@@ -107,18 +105,18 @@ async fn conduct_experiment(
 
     if subscribe_to_topics(analyser, analyser_id, analyser_qos, &topics).await.is_err() {
         return ExperimentResult::new(
-            format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), 
-            -1.0, 
-            -1.0, 
-            -1.0, 
-            -1.0
+            qos_to_u8(analyser_qos),
+            instancecount,
+            qos_to_u8(publisher_qos),
+            delay, 
+            Vec::new()
         );
     }
 
-    let message_rate: f64 = 0.0;
-    let loss_rate: f64 = 0.0;
-    let out_of_order_rate: f64 = 0.0;
-    let inter_message_gap: f64 = 0.0;
+    let mut previous_counter: [u64; 5] = [0; 5];
+    let mut message_count: [u64; 5] = [0; 5];
+    let mut out_of_order_count: [u64; 5] = [0; 5];
+    let mut inter_message_gap: [f64; 5] = [0.0; 5];
 
     // $SYS Measurements
     // let average_heap_size: u64 = 0;
@@ -133,6 +131,20 @@ async fn conduct_experiment(
                 Event::Incoming(Packet::Publish(publish)) => {
                     // Print the payload of the incoming message
                     if publish.topic == publisher_topic {
+                        let i = publisher_topic_instance(&publisher_topic).unwrap() - 1;
+                        message_count[i] += 1;
+
+                        let mut array = [0u8; 8];
+
+                        let len = publish.payload.len().min(8);
+                        array[..len].copy_from_slice(&publish.payload[..len]);
+
+                        let counter = u64::from_be_bytes(array);
+                        if counter < previous_counter[i] {
+                            out_of_order_count[i] += 1;
+                        }
+                        previous_counter[i] = counter;
+
                         debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publisher_topic);
                     }
                     else if publish.topic == CURRENT_SIZE_TOPIC {
@@ -165,11 +177,34 @@ async fn conduct_experiment(
         }
     }
 
+    let mut topic_results = Vec::new();
+    
+    let expected_count = SEND_DURATION.as_millis() as u64 / (delay + 1);
+
+    for i in 0..instancecount as usize {
+        let message_rate = message_count[i] as f64 / SEND_DURATION.as_secs() as f64;
+        let loss_rate = expected_count as f64 / message_count[i] as f64;
+        let out_of_order_rate = message_count[i] as f64 / out_of_order_count[i] as f64;
+        let inter_message_gap = inter_message_gap[i];
+
+        let topic = publisher_topic_string((i + 1) as u8, publisher_qos, delay);
+
+        topic_results.push(
+            TopicResult::new(
+                topic, 
+                message_rate,
+                loss_rate,
+                out_of_order_rate,
+                inter_message_gap,
+            )
+        );
+    }
+
     ExperimentResult::new(
-        format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), 
-        message_rate, 
-        loss_rate, 
-        out_of_order_rate, 
-        inter_message_gap
+        qos_to_u8(analyser_qos),
+        instancecount,
+        qos_to_u8(publisher_qos),
+        delay,
+        topic_results,
     )
 }

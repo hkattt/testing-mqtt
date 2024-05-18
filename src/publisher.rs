@@ -30,7 +30,7 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, runn
             None => return
         };
 
-        let publisher_topic = publisher_topic_string(instancecount, qos, delay);
+        let publisher_topic = publisher_topic_string(publisher_index, qos, delay);
 
         // TODO: Surely we can do this some other way?
         let publisher_clone = Arc::clone(&publisher);
@@ -53,7 +53,7 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, runn
 async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_topic: &str, qos: QoS, delay: u64) {
     let mut counter = 0;
     let start = std::time::Instant::now();
-    while start.elapsed().as_secs() > SEND_DURATION.as_secs() {
+    while start.elapsed().as_secs() < SEND_DURATION.as_secs() {
         // Publish the counter value
         if let Err(error) = publisher.publish(publisher_topic, qos, false, counter.to_string()).await {
             debug_eprintln!("{} failed to publish {} to {} with error: {}", publisher_id, counter, publisher_topic, error);
@@ -84,7 +84,6 @@ async fn receive_topic_values(eventloop: &mut EventLoop, publisher_id: &str) -> 
                     // Receive instancecount 
                     if publish.topic == INSTANCECOUNT_TOPIC {
                         instancecount = Some(u8::from_be_bytes([publish.payload[0]]));
-                        debug_println!("{} received {:?} on {}", publisher_id, instancecount, INSTANCECOUNT_TOPIC);
                     } // Receive qos 
                     else if publish.topic == QOS_TOPIC {
                         qos = Some(
@@ -92,7 +91,6 @@ async fn receive_topic_values(eventloop: &mut EventLoop, publisher_id: &str) -> 
                                 u8::from_be_bytes([publish.payload[0]])
                             )
                         );
-                        debug_println!("{} received {:?} on {}", publisher_id, qos, QOS_TOPIC);
                     } // Receive delay 
                     else if publish.topic == DELAY_TOPIC {
                         if let Ok(bytes_array) = publish.payload[0..=7].try_into() {
@@ -101,7 +99,6 @@ async fn receive_topic_values(eventloop: &mut EventLoop, publisher_id: &str) -> 
                             debug_eprintln!("{} unable to convert {:?} to u64 delay on {}", publisher_id, publish.payload, DELAY_TOPIC);
                             return None;
                         }
-                        debug_println!("{} received {:?} on {}", publisher_id, delay, DELAY_TOPIC);
                     } 
                 }
                 _ => ()
@@ -117,7 +114,5 @@ async fn receive_topic_values(eventloop: &mut EventLoop, publisher_id: &str) -> 
             return None;
         }
     };
-    Some(
-        (instancecount.unwrap(), qos, delay.unwrap())
-    )
+    Some((instancecount.unwrap(), qos, delay.unwrap()))
 }

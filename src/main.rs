@@ -2,7 +2,7 @@ mod analyser;
 mod publisher;
 mod experiment;
 
-use std::time::Duration;
+use std::{sync::{Arc, Mutex}, time::Duration};
 
 use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, QoS};
 use::debug_print::{debug_println, debug_eprintln};
@@ -27,7 +27,7 @@ const CLIENTS_CONNECTED_TOPIC: &str = "$SYS/broker/clients/connected";
 const RESULT_FILE: &str             = "experiment-results.csv";
 
 // Publisher send duration (seconds)
-const SEND_DURATION: u64            = 0; 
+const SEND_DURATION: u64            = 1; 
 // Maximum number of publishers 
 const NPUBLISHERS: u8               = 5;
 
@@ -53,6 +53,8 @@ async fn main() {
         NPUBLISHERS
     );
 
+    let running = Arc::new(Mutex::new(true));
+
     println!("Spawning analyser task\n");
     let analyser_task = tokio::spawn(
         analyser::main_analyser(HOSTNAME, PORT)
@@ -63,24 +65,23 @@ async fn main() {
     for publisher_index in 1..=NPUBLISHERS {
         publisher_tasks.push(
             tokio::spawn(
-                publisher::main_publisher(publisher_index, HOSTNAME, PORT)
+                publisher::main_publisher(publisher_index, HOSTNAME, PORT, Arc::clone(&running))
             )
         );
     }
 
-    // Wait for all tasks to finish
+    // Wait for the analyser to finish
     let experiment_results = analyser_task.await.unwrap();
 
+    // Signal for the publisher tasks to stop
+    *running.lock().unwrap() = false;
+
+    // Save experiment results
     if let Err(error) = experiment::save(experiment_results) {
         eprintln!("Unable to save experiment results: {}", error);
         return;
     } else {
         println!("Saved experiment results to {}", RESULT_FILE);
-    }
-    // TODO: Save results after publisher tasks finish
-
-    for publisher_task in publisher_tasks {
-        publisher_task.await.unwrap();
     }
 
     println!("EXPERIMENTS COMPLETED");

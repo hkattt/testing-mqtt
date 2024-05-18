@@ -45,7 +45,7 @@ pub fn save(experiment_results: Vec<ExperimentResult>) -> io::Result<()> {
     let mut writer = Writer::from_writer(file);
 
     // Write CSV headers
-    writer.write_record(&["", "Message Rate (message/second)", "Loss Rate", "Out-of-order Rate", "Inter-message Gap"]).unwrap();
+    writer.write_record(&["", "Message Rate (message/second)", "Loss Rate", "Out-of-order Rate", "Inter-message Gap"])?;
 
     for experiment_result in experiment_results.iter() {
         writer.write_record(
@@ -56,7 +56,7 @@ pub fn save(experiment_results: Vec<ExperimentResult>) -> io::Result<()> {
                 experiment_result.out_of_order_rate.to_string(),
                 experiment_result.inter_message_gap.to_string(),
             ]
-        ).unwrap();
+        )?;
     }
     // TODO: Actually hanlde errors
     Ok(())

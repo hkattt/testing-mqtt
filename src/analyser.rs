@@ -28,6 +28,7 @@ pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
         for instancecount in instancecounts {
             for publisher_qos in qoss {
                 for delay in delays {
+                    // Small delay to allow the publishers to get ready
                     tokio::time::sleep(Duration::from_secs(1)).await;
 
                     println!(
@@ -86,7 +87,7 @@ async fn conduct_experiment(
         } else {
             debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, instancecount, INSTANCECOUNT_TOPIC);
         }
-
+    
         // Publish the qos
         let publisher_qos = qos_to_u8(publisher_qos);        
         if let Err(error) = analyser_clone.publish(QOS_TOPIC, analyser_qos, false, publisher_qos.to_be_bytes()).await {
@@ -94,7 +95,7 @@ async fn conduct_experiment(
         } else {
             debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, publisher_qos, QOS_TOPIC);
         }
-
+    
         // Publish the delay
         if let Err(error) = analyser_clone.publish(DELAY_TOPIC, analyser_qos, false, delay.to_be_bytes()).await {
             debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id_clone, delay, DELAY_TOPIC, error);
@@ -127,6 +128,9 @@ async fn conduct_experiment(
 
     // Event loop to handle incoming messages
     while let Ok(event) = eventloop.poll().await {
+        if start.elapsed().as_secs() > SEND_DURATION {
+            break;
+        } 
         match event {
             Event::Incoming(Packet::Publish(publish)) => {
                 // Print the payload of the incoming message
@@ -160,10 +164,8 @@ async fn conduct_experiment(
             }
             _ => {}
         }
-        if start.elapsed().as_secs() > SEND_DURATION {
-            break;
-        }
     }
+    
     ExperimentResult::new(
         format!("{}{}", qos_to_u8(analyser_qos), publisher_topic), 
         message_rate, 

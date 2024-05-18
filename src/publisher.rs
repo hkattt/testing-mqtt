@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::task;
 use rumqttc::{AsyncClient, Event, EventLoop, Packet, QoS};
@@ -7,7 +7,7 @@ use::debug_print::{debug_println, debug_eprintln};
 use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics, u8_to_qos};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
 
-pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16) {
+pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, running: Arc<Mutex<bool>>) {
     let publisher_id = format!("pub-{}", publisher_index);
 
     let (publisher, mut eventloop) = create_mqtt_conn(&publisher_id, hostname, port);
@@ -20,7 +20,7 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16) {
         return;
     }
 
-    loop {
+    while *running.lock().unwrap() {
         // Receive instancecount, qos, and delay from the analyser
         let (instancecount, qos, delay) = match receive_topic_values(&mut eventloop, &publisher_id).await {
             Some((instancecount, qos, delay)) => (instancecount, qos, delay),
@@ -48,20 +48,19 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16) {
 }
 
 async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_topic: &str, qos: QoS, delay: u64) {
+    let mut counter = 0;
     let start = std::time::Instant::now();
-
-    for counter in 0.. {
+    while start.elapsed().as_secs() > SEND_DURATION {
         // Publish the counter value
         if let Err(error) = publisher.publish(publisher_topic, qos, false, counter.to_string()).await {
             debug_eprintln!("{} failed to publish {} to {} with error: {}", publisher_id, counter, publisher_topic, error);
         } else {
             debug_println!("{} successfully published {} to topic: {}", publisher_id, counter, publisher_topic);
         }
-        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
-        if start.elapsed().as_secs() > SEND_DURATION {
-            break;
-        } 
+        counter += 1;
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
     }
 } 
 

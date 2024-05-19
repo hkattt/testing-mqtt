@@ -11,7 +11,7 @@ pub struct TopicResult {
     message_rate: f64, 
     loss_rate: f64, 
     out_of_order_rate: f64, 
-    inter_message_gap: f64,
+    inter_message_gap: u64,
 }
 
 impl TopicResult {
@@ -20,7 +20,7 @@ impl TopicResult {
         message_rate: f64,
         loss_rate: f64,
         out_of_order_rate: f64, 
-        inter_message_gap: f64) -> TopicResult
+        inter_message_gap: u64) -> TopicResult
     {
         TopicResult {
             topic,

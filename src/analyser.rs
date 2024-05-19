@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rumqttc::{AsyncClient, EventLoop, Event, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
@@ -116,7 +116,7 @@ async fn conduct_experiment(
     let mut previous_counter: [u64; 5] = [0; 5];
     let mut message_count: [u64; 5] = [0; 5];
     let mut out_of_order_count: [u64; 5] = [0; 5];
-    let mut inter_message_gap: [f64; 5] = [0.0; 5];
+    let mut message_times: [Vec<Instant>; 5] = Default::default();
 
     // $SYS Measurements
     // let average_heap_size: u64 = 0;
@@ -144,6 +144,8 @@ async fn conduct_experiment(
                             out_of_order_count[i] += 1;
                         }
                         previous_counter[i] = counter;
+
+                        message_times[i].push(std::time::Instant::now());
 
                         debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publisher_topic);
                     }
@@ -185,7 +187,7 @@ async fn conduct_experiment(
         let message_rate = message_count[i] as f64 / SEND_DURATION.as_secs() as f64;
         let loss_rate = expected_count as f64 / message_count[i] as f64;
         let out_of_order_rate = message_count[i] as f64 / out_of_order_count[i] as f64;
-        let inter_message_gap = inter_message_gap[i];
+        let inter_message_gap = compute_inter_message_gap(&message_times[i]);
 
         let topic = publisher_topic_string((i + 1) as u8, publisher_qos, delay);
 
@@ -207,4 +209,32 @@ async fn conduct_experiment(
         delay,
         topic_results,
     )
+}
+
+fn compute_inter_message_gap(message_times: &Vec<Instant>) -> u64 {
+    let len = message_times.len();
+
+    if len == 0 {
+        return 0;
+    } else if len == 1 {
+        return 0;
+    } else if len == 2 {
+        return (message_times[1] - message_times[0]).as_millis() as u64;
+    }
+    
+    let mut time_differences = Vec::with_capacity(len - 1);
+
+    for i in 1..len {
+        time_differences.push(message_times[i] - message_times[i - 1]);
+    }
+
+    time_differences.sort();
+
+    if len % 2 == 1 {
+        time_differences[len / 2].as_millis() as u64
+    } else {
+        let mid1 = time_differences[len / 2 - 1].as_millis();
+        let mid2 = time_differences[len / 2].as_millis();
+        ((mid1 + mid2) / 2) as u64
+    }
 }

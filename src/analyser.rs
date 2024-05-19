@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rumqttc::{AsyncClient, EventLoop, Event, Packet, QoS};
+use rumqttc::{AsyncClient, Event, EventLoop, Packet, Publish, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 use chrono::{Local, Timelike};
 
@@ -139,10 +139,13 @@ async fn conduct_experiment(
     let mut out_of_order_count: [u64; 5] = [0; 5];
     let mut message_times: [Vec<Instant>; 5] = Default::default();
 
-    // $SYS Measurements
-    // let average_heap_size: u64 = 0;
-    // let max_heap_size: u64 = 0;
-    // let connections: u64 = 0;
+    // Mosquitto $SYS broker measurements
+    let mut nconnected_clients: u64;
+    let mut current_heap_size: u64;
+    let mut max_heap_size: u64;
+    let mut npub_msgs_recv: u64;
+    let mut npub_msgs_sent: u64;
+    let mut npub_msgs_dropped: u64;
 
     let start = std::time::Instant::now();
     // Event loop to handle incoming messages
@@ -155,12 +158,8 @@ async fn conduct_experiment(
                         let i = publisher_topic_instance(&publish.topic).unwrap() - 1;
                         message_count[i] += 1;
 
-                        let mut array = [0u8; 8];
+                        let counter = bytes_to_u64(&publish);
 
-                        let len = publish.payload.len().min(8);
-                        array[..len].copy_from_slice(&publish.payload[..len]);
-
-                        let counter = u64::from_be_bytes(array);
                         if counter < previous_counter[i] {
                             out_of_order_count[i] += 1;
                         }
@@ -168,31 +167,37 @@ async fn conduct_experiment(
 
                         message_times[i].push(std::time::Instant::now());
 
-                        debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publish.topic);
+                        debug_println!("{} received {} on {}", analyser_id, counter, publish.topic);
                     }
                     else if publish.topic == CLIENTS_CONNECTED_TOPIC {
-                        // TODO: Make debug print
-                        println!("Number of connected clients: {:?}", publish.payload);
+                        nconnected_clients = utf8_to_u64(&publish);
+                        
+                        debug_println!("Number of connected clients: {}", nconnected_clients);
                     }
-                    else if publish.topic == CURRENT_SIZE_TOPIC {
-                        // TODO: Make debug print
-                        println!("Current heap size: {:?}", publish.payload);
+                    else if publish.topic == CURRENT_SIZE_TOPIC {                        
+                        current_heap_size = utf8_to_u64(&publish);
+
+                        debug_println!("Current heap size: {}", current_heap_size);
                     }
                     else if publish.topic == MAX_SIZE_TOPIC {
-                        // TODO: Make debug print
-                        println!("Maximum heap size: {:?}", publish.payload);
+                        max_heap_size = utf8_to_u64(&publish);
+                        
+                        debug_println!("Maximum heap size: {}", max_heap_size);
                     }
                     else if publish.topic == PUB_MSGS_RECEIVED_TOPIC {
-                        // TODO: Make debug print
-                        println!("Number of publisher messages received: {:?}", publish.payload);
+                        npub_msgs_recv = utf8_to_u64(&publish);
+                        
+                        debug_println!("Number of publisher messages received: {}", npub_msgs_recv);
                     }
                     else if publish.topic == PUB_MSGS_SENT_TOPIC {
-                        // TODO: Make debug print
-                        println!("Number of publisher messages sent: {:?}", publish.payload);
+                        npub_msgs_sent = utf8_to_u64(&publish);
+
+                        debug_println!("Number of publisher messages sent: {}", npub_msgs_sent);
                     }
                     else if publish.topic == PUB_MSGS_DROPPED_TOPIC {
-                        // TODO: Make debug print
-                        println!("Number of publisher messages dropped: {:?}", publish.payload);
+                        npub_msgs_dropped = utf8_to_u64(&publish);
+
+                        debug_println!("Number of publisher messages dropped: {}", npub_msgs_dropped);
                     }
                 }
                 _ => {}
@@ -278,4 +283,18 @@ fn compute_expected_count(delay: u64) -> u64 {
     } else {
         SEND_DURATION.as_millis() as u64 / delay
     }
+}
+
+fn bytes_to_u64(publish: &Publish) -> u64 {
+    let payload = &publish.payload.to_vec();
+    let mut array = [0u8; 8];
+    let len = payload.len().min(8);
+    array[..len].copy_from_slice(&payload[..len]);
+    u64::from_be_bytes(array)
+}
+
+fn utf8_to_u64(publish: &Publish) -> u64 {
+    let payload = &publish.payload;
+    let payload_str = std::str::from_utf8(&payload).unwrap();
+    payload_str.parse::<u64>().unwrap()
 }

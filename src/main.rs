@@ -31,6 +31,7 @@ const NPUBLISHERS: u8           = 5;
  *      - Just make the publisher send everything to begin with?
  * 2. Make the Publisher actually end
  * 3. The program should go VERY quickly at 0ms delay and qos = 0
+ * 4. Figure out why the first experiments literally receive nothing?
  */
 
 #[tokio::main]

@@ -51,11 +51,11 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, runn
 }
 
 async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_topic: &str, qos: QoS, delay: u64) {
-    let mut counter = 0;
+    let mut counter: u64 = 0;
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < SEND_DURATION.as_secs() {
         // Publish the counter value
-        if let Err(error) = publisher.publish(publisher_topic, qos, false, counter.to_string()).await {
+        if let Err(error) = publisher.publish(publisher_topic, qos, false, counter.to_be_bytes()).await {
             debug_eprintln!("{} failed to publish {} to {} with error: {}", publisher_id, counter, publisher_topic, error);
         } else {
             debug_println!("{} successfully published {} to topic: {}", publisher_id, counter, publisher_topic);

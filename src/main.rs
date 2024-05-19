@@ -2,34 +2,28 @@ mod analyser;
 mod publisher;
 mod experiment;
 
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::{fmt::Display, sync::{Arc, Mutex}, time::Duration};
+use std::fmt::Debug;
 
 use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, QoS};
 use::debug_print::{debug_println, debug_eprintln};
+use tokio::time::timeout;
 
 // Broker details
-const HOSTNAME: &str                = "localhost";
-const PORT: u16                     = 1883;
+const HOSTNAME: &str            = "localhost";
+const PORT: u16                 = 1883;
 
 // MQQT topics
-const INSTANCECOUNT_TOPIC: &str     = "request/instancecount";
-const QOS_TOPIC: &str               = "request/qos";
-const DELAY_TOPIC: &str             = "request/delay";
+const INSTANCECOUNT_TOPIC: &str = "request/instancecount";
+const QOS_TOPIC: &str           = "request/qos";
+const DELAY_TOPIC: &str         = "request/delay";
 
-// Mosquitto $SYS topics
-const CURRENT_SIZE_TOPIC: &str      = "$SYS/broker/heap/current size";
-const MAX_SIZE_TOPIC: &str          = "$SYS/broker/heap/maximum size";
-const CONNECTIONS_TOPIC: &str       = "$SYS/broker/load/connections/1min";
-const INFLIGHT_TOPIC: &str          = "$SYS/broker/messages/inflight";
-const DROPPED_TOPIC: &str           = "$SYS/broker/publish/messages/dropped";
-const CLIENTS_CONNECTED_TOPIC: &str = "$SYS/broker/clients/connected";
-
-const EXPERIMENT_DIR: &str          = "experiment-results";
+const EXPERIMENT_DIR: &str      = "experiment-results";
 
 // Publisher send duration (seconds)
-const SEND_DURATION: Duration       = Duration::from_secs(1); 
+const SEND_DURATION: Duration   = Duration::from_secs(1); 
 // Maximum number of publishers 
-const NPUBLISHERS: u8               = 5;
+const NPUBLISHERS: u8           = 5;
 
 /**
  * TODO:
@@ -97,15 +91,28 @@ fn create_mqtt_conn(client_id: &str, hostname: &str, port: u16, keep_alive: Dura
     AsyncClient::new(options, 10)
 }
 
-async fn subscribe_to_topics(client: &AsyncClient, client_id: &str, qos: QoS, topics: &[&str]) -> Result<(), ClientError>{
+async fn subscribe_to_topics<S>(client: &AsyncClient, client_id: &str, qos: QoS, topics: &[S]) -> Result<(), ClientError> 
+where 
+    S: AsRef<str> + Debug,
+{
     for topic in topics {
-        if let Err(error) = client.subscribe(*topic, qos).await {
-            // TODO: Replace with debug prints
-            debug_eprintln!("{} failed to subscribe to topic {} with error: {}", client_id, topic, error);
-            return Err(error);
-        } else {
-            // TODO: Replace with debug prints
-            debug_println!("{} subscribed to topic: {}", client_id, topic);
+        let topic_str = topic.as_ref();
+        let subscribe_future = client.subscribe(topic_str, qos);
+        match timeout(Duration::from_millis(100), subscribe_future).await {
+            Ok(outcome) => {
+                if let Err(error) = outcome {
+                    // TODO: Replace with debug prints
+                    debug_eprintln!("{} failed to subscribe to topic {} with error: {}", client_id, topic_str, error);
+                    return Err(error);
+                } else {
+                    // TODO: Replace with debug prints
+                    debug_println!("{} subscribed to topic: {}", client_id, topic_str);
+                }
+            }
+            Err(_) => {
+                debug_eprintln!("{} timed out subscribing to topic {}", client_id, topic_str);
+                // TODO: Error?
+            }
         }
     }
     Ok(())

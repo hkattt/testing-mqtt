@@ -6,8 +6,18 @@ use::debug_print::{debug_println, debug_eprintln};
 use chrono::{Local, Timelike};
 
 use crate::{create_mqtt_conn, publisher_topic_string, publisher_topic_instance, qos_to_u8, subscribe_to_topics};
-use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, CURRENT_SIZE_TOPIC, CONNECTIONS_TOPIC, MAX_SIZE_TOPIC, INFLIGHT_TOPIC, DROPPED_TOPIC, CLIENTS_CONNECTED_TOPIC, SEND_DURATION};
+use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
 use crate::experiment::{ExperimentResult, TopicResult};
+
+// Mosquitto $SYS topics
+const CLIENTS_CONNECTED_TOPIC: &str  = "$SYS/broker/clients/connected";
+
+const CURRENT_SIZE_TOPIC: &str       = "$SYS/broker/heap/current";
+const MAX_SIZE_TOPIC: &str           = "$SYS/broker/heap/maximum";
+
+const PUB_MSGS_RECEIVED_TOPIC: &str  = "$SYS/broker/publish/messages/received";
+const PUB_MSGS_SENT_TOPIC: &str      = "$SYS/broker/publish/messages/sent";
+const PUB_MSGS_DROPPED_TOPIC: &str   = "$SYS/broker/publish/messages/dropped";
 
 pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
     let analyser_id = "analyser";
@@ -23,6 +33,15 @@ pub async fn main_analyser(hostname: &str, port: u16) -> Vec<ExperimentResult> {
     let analyser = Arc::new(analyser);
 
     let mut experiment_results = Vec::new();
+
+    let sys_topics = vec![
+        CLIENTS_CONNECTED_TOPIC, CURRENT_SIZE_TOPIC, MAX_SIZE_TOPIC, 
+        PUB_MSGS_RECEIVED_TOPIC, PUB_MSGS_SENT_TOPIC, PUB_MSGS_DROPPED_TOPIC
+    ];
+
+    if subscribe_to_topics(&analyser, analyser_id, QoS::ExactlyOnce, &sys_topics).await.is_err() {
+        return Vec::new();
+    }
 
     for analyser_qos in qoss {
         for instancecount in instancecounts {
@@ -73,11 +92,7 @@ async fn conduct_experiment(
         instancecount: u8, 
         publisher_qos: QoS, 
         delay: u64) -> ExperimentResult {
-    
-    let publisher_topic = publisher_topic_string(instancecount, publisher_qos, delay);
-    
-    let topics = [&publisher_topic, CURRENT_SIZE_TOPIC, MAX_SIZE_TOPIC, CONNECTIONS_TOPIC, INFLIGHT_TOPIC, DROPPED_TOPIC, CLIENTS_CONNECTED_TOPIC];
-    
+       
     // TODO: Improve this?
     let analyser_clone = Arc::clone(&analyser);
     let analyser_id_clone = analyser_id.to_string();
@@ -103,7 +118,13 @@ async fn conduct_experiment(
         debug_println!("{} successfully published {} to topic: {}", analyser_id_clone, delay, DELAY_TOPIC);
     }
 
-    if subscribe_to_topics(analyser, analyser_id, analyser_qos, &topics).await.is_err() {
+    let mut publisher_topics = Vec::with_capacity(instancecount as usize);
+    for i in 1..=instancecount {
+        let publisher_topic = publisher_topic_string(i, publisher_qos, delay);
+        publisher_topics.push(publisher_topic);
+    }
+
+    if subscribe_to_topics(analyser, analyser_id, analyser_qos, &publisher_topics).await.is_err() {
         return ExperimentResult::new(
             qos_to_u8(analyser_qos),
             instancecount,
@@ -130,8 +151,8 @@ async fn conduct_experiment(
             match event {
                 Event::Incoming(Packet::Publish(publish)) => {
                     // Print the payload of the incoming message
-                    if publish.topic == publisher_topic {
-                        let i = publisher_topic_instance(&publisher_topic).unwrap() - 1;
+                    if publisher_topics.contains(&publish.topic) {
+                        let i = publisher_topic_instance(&publish.topic).unwrap() - 1;
                         message_count[i] += 1;
 
                         let mut array = [0u8; 8];
@@ -147,31 +168,31 @@ async fn conduct_experiment(
 
                         message_times[i].push(std::time::Instant::now());
 
-                        debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publisher_topic);
-                    }
-                    else if publish.topic == CURRENT_SIZE_TOPIC {
-                        // TODO: Make debug print
-                        debug_println!("Current heap size: {:?}", publish.payload);
-                    }
-                    else if publish.topic == MAX_SIZE_TOPIC {
-                        // TODO: Make debug print
-                        debug_println!("Maximum heap size: {:?}", publish.payload);
-                    }
-                    else if publish.topic == CONNECTIONS_TOPIC {
-                        // TODO: Make debug print
-                        debug_println!("Current heap size: {:?}", publish.payload);
-                    }
-                    else if publish.topic == INFLIGHT_TOPIC {
-                        // TODO: Make debug print
-                        debug_println!("Number of inflight messages: {:?}", publish.payload);
-                    }
-                    else if publish.topic == DROPPED_TOPIC {
-                        // TODO: Make debug print
-                        debug_println!("Number of dropped messages: {:?}", publish.payload);
+                        debug_println!("{} received {:?} on {}", analyser_id, publish.payload, publish.topic);
                     }
                     else if publish.topic == CLIENTS_CONNECTED_TOPIC {
                         // TODO: Make debug print
-                        debug_println!("Number of clients messages: {:?}", publish.payload);
+                        println!("Number of connected clients: {:?}", publish.payload);
+                    }
+                    else if publish.topic == CURRENT_SIZE_TOPIC {
+                        // TODO: Make debug print
+                        println!("Current heap size: {:?}", publish.payload);
+                    }
+                    else if publish.topic == MAX_SIZE_TOPIC {
+                        // TODO: Make debug print
+                        println!("Maximum heap size: {:?}", publish.payload);
+                    }
+                    else if publish.topic == PUB_MSGS_RECEIVED_TOPIC {
+                        // TODO: Make debug print
+                        println!("Number of publisher messages received: {:?}", publish.payload);
+                    }
+                    else if publish.topic == PUB_MSGS_SENT_TOPIC {
+                        // TODO: Make debug print
+                        println!("Number of publisher messages sent: {:?}", publish.payload);
+                    }
+                    else if publish.topic == PUB_MSGS_DROPPED_TOPIC {
+                        // TODO: Make debug print
+                        println!("Number of publisher messages dropped: {:?}", publish.payload);
                     }
                 }
                 _ => {}
@@ -181,11 +202,11 @@ async fn conduct_experiment(
 
     let mut topic_results = Vec::new();
     
-    let expected_count = SEND_DURATION.as_millis() as u64 / (delay + 1);
+    let expected_count = compute_expected_count(delay);
 
     for i in 0..instancecount as usize {
         let message_rate = message_count[i] as f64 / SEND_DURATION.as_secs() as f64;
-        let loss_rate = expected_count as f64 / message_count[i] as f64;
+        let loss_rate = compute_loss_rate(expected_count, message_count[i]);
         let out_of_order_rate = message_count[i] as f64 / out_of_order_count[i] as f64;
         let inter_message_gap = compute_inter_message_gap(&message_times[i]);
 
@@ -214,9 +235,7 @@ async fn conduct_experiment(
 fn compute_inter_message_gap(message_times: &Vec<Instant>) -> u64 {
     let len = message_times.len();
 
-    if len == 0 {
-        return 0;
-    } else if len == 1 {
+    if len <= 1 {
         return 0;
     } else if len == 2 {
         return (message_times[1] - message_times[0]).as_millis() as u64;
@@ -236,5 +255,27 @@ fn compute_inter_message_gap(message_times: &Vec<Instant>) -> u64 {
         let mid1 = time_differences[len / 2 - 1].as_millis();
         let mid2 = time_differences[len / 2].as_millis();
         ((mid1 + mid2) / 2) as u64
+    }
+}
+
+fn compute_loss_rate(expected_count: u64, message_count: u64) -> f64 {
+    // If there is no expected count, the loss rate is zero
+    if expected_count == 0 {
+        return 0.0;
+    }
+
+    let lost_messages = expected_count - message_count;
+    (lost_messages as f64 / expected_count as f64) * 100.0
+}
+
+fn compute_expected_count(delay: u64) -> u64 {
+    // If the delay is zero, messages are theoretically sent as fast as possible
+    // We estimate the expected count by setting delay = 0.5 ms
+    // TODO: Idk
+    // Possible idea: Pass a shared 'stat' data structure to the publishers
+    if delay == 0 {
+        2 * SEND_DURATION.as_millis() as u64
+    } else {
+        SEND_DURATION.as_millis() as u64 / delay
     }
 }

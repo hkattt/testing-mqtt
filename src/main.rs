@@ -97,22 +97,13 @@ where
 {
     for topic in topics {
         let topic_str = topic.as_ref();
-        let subscribe_future = client.subscribe(topic_str, qos);
-        match timeout(Duration::from_millis(100), subscribe_future).await {
-            Ok(outcome) => {
-                if let Err(error) = outcome {
-                    // TODO: Replace with debug prints
-                    debug_eprintln!("{} failed to subscribe to topic {} with error: {}", client_id, topic_str, error);
-                    return Err(error);
-                } else {
-                    // TODO: Replace with debug prints
-                    debug_println!("{} subscribed to topic: {}", client_id, topic_str);
-                }
-            }
-            Err(_) => {
-                debug_eprintln!("{} timed out subscribing to topic {}", client_id, topic_str);
-                // TODO: Error?
-            }
+        if let Err(error) = client.subscribe(topic_str, qos).await {
+            // TODO: Replace with debug prints
+            eprintln!("{} failed to subscribe to topic {} with error: {}", client_id, topic_str, error);
+            return Err(error);
+        } else {
+            // TODO: Replace with debug prints
+            println!("{} subscribed to topic: {}", client_id, topic_str);
         }
     }
     Ok(())

@@ -2,12 +2,11 @@ mod analyser;
 mod publisher;
 mod experiment;
 
-use std::{fmt::Display, sync::{Arc, Mutex}, time::Duration};
+use std::{sync::{Arc, Mutex}, time::Duration};
 use std::fmt::Debug;
 
 use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, QoS};
 use::debug_print::{debug_println, debug_eprintln};
-use tokio::time::timeout;
 
 // Broker details
 const HOSTNAME: &str            = "localhost";
@@ -19,6 +18,8 @@ const QOS_TOPIC: &str           = "request/qos";
 const DELAY_TOPIC: &str         = "request/delay";
 
 const EXPERIMENT_DIR: &str      = "experiment-results";
+const TOPIC_RESULTS_FILE: &str  = "topic-results.csv";
+const SYS_RESULT_FILE: &str     = "sys-results.csv";
 
 // Publisher send duration (seconds)
 const SEND_DURATION: Duration   = Duration::from_secs(1); 
@@ -50,20 +51,30 @@ async fn main() {
 
     let running = Arc::new(Mutex::new(true));
 
-    println!("Spawning analyser task\n");
-    let analyser_task = tokio::spawn(
-        analyser::main_analyser(HOSTNAME, PORT)
-    );
+    let counters: Vec<Arc<Mutex<u64>>> = (0..NPUBLISHERS)
+        .map(|_| Arc::new(Mutex::new(0)))
+        .collect();
 
     println!("Spawning publisher task(s)\n");
     let mut publisher_tasks = Vec::new();
     for publisher_index in 1..=NPUBLISHERS {
         publisher_tasks.push(
             tokio::spawn(
-                publisher::main_publisher(publisher_index, HOSTNAME, PORT, Arc::clone(&running))
+                publisher::main_publisher(
+                    publisher_index, 
+                    HOSTNAME, 
+                    PORT, 
+                    Arc::clone(&running), 
+                    Arc::clone(&counters[publisher_index as usize - 1])
+                )
             )
         );
     }
+
+    println!("Spawning analyser task\n");
+    let analyser_task = tokio::spawn(
+        analyser::main_analyser(HOSTNAME, PORT, counters)
+    );
 
     // Wait for the analyser to finish
     let experiment_results = analyser_task.await.unwrap();
@@ -72,7 +83,7 @@ async fn main() {
     *running.lock().unwrap() = false;
 
     // Save experiment results
-    if let Err(error) = experiment::save(experiment_results) {
+    if let Err(error) = experiment::save_experiment_results(experiment_results, TOPIC_RESULTS_FILE, SYS_RESULT_FILE) {
         eprintln!("Unable to save experiment results: {}\n", error);
         return;
     } else {
@@ -100,11 +111,11 @@ where
         let topic_str = topic.as_ref();
         if let Err(error) = client.subscribe(topic_str, qos).await {
             // TODO: Replace with debug prints
-            eprintln!("{} failed to subscribe to topic {} with error: {}", client_id, topic_str, error);
+            debug_eprintln!("{} failed to subscribe to topic {} with error: {}", client_id, topic_str, error);
             return Err(error);
         } else {
             // TODO: Replace with debug prints
-            println!("{} subscribed to topic: {}", client_id, topic_str);
+            debug_println!("{} subscribed to topic: {}", client_id, topic_str);
         }
     }
     Ok(())

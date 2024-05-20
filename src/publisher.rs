@@ -8,7 +8,7 @@ use::debug_print::{debug_println, debug_eprintln};
 use crate::{create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics, u8_to_qos};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
 
-pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, running: Arc<Mutex<bool>>) {
+pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, running: Arc<Mutex<bool>>, counter: Arc<Mutex<u64>>) {
     let publisher_id = format!("pub-{}", publisher_index);
 
     let (publisher, mut eventloop) = create_mqtt_conn(&publisher_id, hostname, port, Duration::from_secs(5));
@@ -34,13 +34,14 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, runn
 
         // TODO: Surely we can do this some other way?
         let publisher_clone = Arc::clone(&publisher);
+        let counter_clone = Arc::clone(&counter);
         let publisher_id_clone = publisher_id.clone();
 
         let counter_task = task::spawn(async move {
             if publisher_index <= instancecount {
                 debug_println!("{} publishing to {} using instancecount: {}, qos: {:?}, and delay: {}", 
                     publisher_id_clone, publisher_topic, instancecount, qos_to_u8(qos), delay);
-                publish_counter(&publisher_clone, &publisher_id_clone, &publisher_topic, qos, delay).await;
+                *counter_clone.lock().unwrap() = publish_counter(&publisher_clone, &publisher_id_clone, &publisher_topic, qos, delay).await;
             }
         });
 
@@ -50,7 +51,7 @@ pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, runn
     }
 }
 
-async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_topic: &str, qos: QoS, delay: u64) {
+async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_topic: &str, qos: QoS, delay: u64) -> u64 {
     let mut counter: u64 = 0;
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < SEND_DURATION.as_secs() {
@@ -65,6 +66,7 @@ async fn publish_counter(publisher: &AsyncClient, publisher_id: &str, publisher_
 
         tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
     }
+    counter
 } 
 
 async fn receive_topic_values(eventloop: &mut EventLoop, publisher_id: &str) -> Option<(u8, QoS, u64)> {

@@ -22,7 +22,7 @@ const TOPIC_RESULTS_FILE: &str  = "topic-results.csv";
 const SYS_RESULT_FILE: &str     = "sys-results.csv";
 
 // Publisher send duration (seconds)
-const SEND_DURATION: Duration   = Duration::from_secs(1); 
+const SEND_DURATION: Duration   = Duration::from_secs(60); 
 
 /// Entry point of the program. Spawns the analyser and publisher(s) needed to 
 /// conduct the experiments. 

@@ -121,14 +121,13 @@ pub fn save_experiment_results(
 
     // Write CSV headers
     topic_results_write.write_record(&[
-        "Experiment ID", "Analyser QoS", "Instance Count", "Publisher QoS", "Delay (ms)", "Topic", "Message Rate", 
-        "Loss Rate", "Out of Order Rate", "Inter Message Gap"
+        "experiment-id", "analyser-qos", "instancecount", "publisher-qos", "delay", "topic", 
+        "message-rate", "loss-rate", "out-of-order-rate", "inter-message-gap"
     ])?; 
 
     sys_results_write.write_record(&[
-        "Experiment ID", "Analyser QoS", "Instance Count", "Publisher QoS", "Delay (ms)", "Number of Connected Clients", 
-        "Average Heap Size", "Max Heap Size", "Number of Publisher Messages Received", "Number of Publisher Messages Sent", 
-        "Number of Publisher Messages Dropped"
+        "experiment-id", "analyser-qos", "instancecount", "publisher-qos", "delay", "nconnected-clients", 
+        "avg-heap-size", "max-heap-size", "npub-msg-recv", "npub-msg-sent", "npub-msg-dropped"
     ])?;
 
     for experiment_result in experiment_results.iter() {

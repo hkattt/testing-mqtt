@@ -1,7 +1,10 @@
-use std::fs::{self, File};
-use std::io::{self, ErrorKind};
-use std::path::Path;
 use csv::Writer;
+
+use std::{
+    fs::{self, File},
+    io::{self, ErrorKind},
+    path::Path
+};
 
 use crate::EXPERIMENT_DIR;
 

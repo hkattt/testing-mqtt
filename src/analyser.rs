@@ -1,24 +1,55 @@
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use rumqttc::{AsyncClient, Event, EventLoop, Packet, QoS};
-use::debug_print::{debug_println, debug_eprintln};
+use rumqttc::{
+    AsyncClient, 
+    Event, 
+    EventLoop, 
+    Packet, 
+    QoS
+};
+use debug_print::{debug_println, debug_eprintln};
 use chrono::{Local, Timelike};
 
-use crate::{bytes_to_u64, create_mqtt_conn, publisher_topic_instance, publisher_topic_string, qos_to_u8, subscribe_to_topics, utf8_to_u64};
-use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
-use crate::experiment::{ExperimentResult, SysResult, TopicResult};
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+
+use crate::{
+    mqqt_helper,
+    experiment::{
+        ExperimentResult,
+        SysResult,
+        TopicResult
+    },
+    INSTANCECOUNT_TOPIC,
+    QOS_TOPIC,
+    DELAY_TOPIC,
+    SEND_DURATION
+};
 
 // Mosquitto $SYS topics
 const CLIENTS_CONNECTED_TOPIC: &str  = "$SYS/broker/clients/connected";
-
 const CURRENT_SIZE_TOPIC: &str       = "$SYS/broker/heap/current";
 const MAX_SIZE_TOPIC: &str           = "$SYS/broker/heap/maximum";
-
 const PUB_MSGS_RECEIVED_TOPIC: &str  = "$SYS/broker/publish/messages/received";
 const PUB_MSGS_SENT_TOPIC: &str      = "$SYS/broker/publish/messages/sent";
 const PUB_MSGS_DROPPED_TOPIC: &str   = "$SYS/broker/publish/messages/dropped";
 
+/// The main analyser function. 
+/// 
+/// The analyser connects to the provided MQQT broker hostname and port before
+/// iterating over all of the experiment parameters. Sends the experiment parameters
+/// to the publishers and takes measurements of the network performance.
+/// 
+/// # Arguments
+/// * `hostname`: Host name of the MQQT broker
+/// * `port`: Port that the MQQT broker is on
+/// * `instancecounts`: Instance count to use for the experiments
+/// * `qoss`: Quality-of-service options to use for the experiments
+/// * `delays`: Publisher message delays to use for the experiments
+/// * `counters`: Counter values updated by the publishers
+/// 
+/// # Returns
+/// The experiment results from the experiment
 pub async fn main_analyser(
         hostname: Arc<String>, 
         port: u16,
@@ -28,22 +59,26 @@ pub async fn main_analyser(
         counters: Vec<Arc<Mutex<u64>>>) -> Vec<ExperimentResult> 
     {
     let analyser_id = "analyser";
-
-    let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, &hostname, port, Duration::from_secs(1));
+    
+    // Connects to the MQQT broker
+    let (analyser, mut eventloop) = mqqt_helper::create_mqtt_conn(
+        analyser_id, &hostname, port, Duration::from_secs(1)
+    );
     
     println!("{} connected to {}:{}", analyser_id, hostname, port);
     
-    let mut experiment_results = Vec::new();
-
     let sys_topics = vec![
         CLIENTS_CONNECTED_TOPIC, CURRENT_SIZE_TOPIC, MAX_SIZE_TOPIC, 
         PUB_MSGS_RECEIVED_TOPIC, PUB_MSGS_SENT_TOPIC, PUB_MSGS_DROPPED_TOPIC
     ];
-
-    if subscribe_to_topics(&analyser, analyser_id, QoS::ExactlyOnce, &sys_topics).await.is_err() {
+    // Subscribes to the broker $SYS topics
+    if mqqt_helper::subscribe_to_topics(&analyser, analyser_id, QoS::ExactlyOnce, &sys_topics).await.is_err() {
         return Vec::new();
     }
 
+    let mut experiment_results = Vec::new();
+
+    // Iterates over every combination of the experiment parameters
     for analyser_qos in &qoss {
         for instancecount in &instancecounts {
             for publisher_qos in &qoss {
@@ -59,12 +94,11 @@ pub async fn main_analyser(
                         \tpublisher qos: {}\n\
                         \tdelay: {}ms\n",
                         local_time.time().hour(), local_time.time().minute(), local_time.time().second(),
-                        qos_to_u8(*analyser_qos),
+                        mqqt_helper::qos_to_u8(*analyser_qos),
                         instancecount,
-                        qos_to_u8(*publisher_qos),
+                        mqqt_helper::qos_to_u8(*publisher_qos),
                         delay
                     );
-
                     // Conduct experiment
                     let experiment_result = 
                         conduct_experiment(&analyser, 
@@ -74,9 +108,7 @@ pub async fn main_analyser(
                                 *instancecount, 
                                 *publisher_qos, 
                                 *delay,
-                                &counters)
-                                .await;
-                    
+                                &counters).await; 
                     // Record experiment result
                     experiment_results.push(experiment_result);
                 }
@@ -86,6 +118,20 @@ pub async fn main_analyser(
     experiment_results
 }
 
+/// Conducts and analyses a single experiment with the given parameters.
+/// 
+/// # Arguments
+/// * `analyser`: The analyser conducting the experiment
+/// * `eventloop`: The eventloop that the analyser is connected to 
+/// * `analyser_id`: Unique ID of the analyser
+/// * `analyser_qos`: The quality-of-service of the analyser for the experiment
+/// * `instancecount`: The instance count for the experiment
+/// * `publisher_qos`: The quality-of-service of the publisher for the experiment
+/// * `delay`: The delay of the publisher for the experiment
+/// * `counter`: Counter values updated by the publishers
+/// 
+/// # Returns
+/// The experiment result of the single experiment
 async fn conduct_experiment(
         analyser: &AsyncClient, 
         eventloop: &mut EventLoop, 
@@ -97,47 +143,51 @@ async fn conduct_experiment(
         counters: &Vec<Arc<Mutex<u64>>>) -> ExperimentResult 
     {
     // Publish the instancecount
-    if let Err(error) = analyser.publish(INSTANCECOUNT_TOPIC, QoS::ExactlyOnce, false, instancecount.to_be_bytes()).await {
-        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC, error);
+    if let Err(_error) = analyser.publish(
+        INSTANCECOUNT_TOPIC, QoS::ExactlyOnce, false, instancecount.to_be_bytes()
+    ).await {
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC, _error);
     } else {
         debug_println!("{} successfully published {} to topic: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC);
     }
-
     // Publish the qos
-    if let Err(error) = analyser.publish(QOS_TOPIC, QoS::ExactlyOnce, false, qos_to_u8(publisher_qos).to_be_bytes()).await {
-        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, qos_to_u8(publisher_qos), QOS_TOPIC, error);
+    if let Err(_error) = analyser.publish(
+        QOS_TOPIC, QoS::ExactlyOnce, false, mqqt_helper::qos_to_u8(publisher_qos).to_be_bytes()
+    ).await {
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, mqqt_helper::qos_to_u8(publisher_qos), QOS_TOPIC, _error);
     } else {
-        debug_println!("{} successfully published {} to topic: {}", analyser_id, qos_to_u8(publisher_qos), QOS_TOPIC);
+        debug_println!("{} successfully published {} to topic: {}", analyser_id, mqqt_helper::qos_to_u8(publisher_qos), QOS_TOPIC);
     }
-
     // Publish the delay
-    if let Err(error) = analyser.publish(DELAY_TOPIC, QoS::ExactlyOnce, false, delay.to_be_bytes()).await {
-        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, delay, DELAY_TOPIC, error);
+    if let Err(_error) = analyser.publish(
+        DELAY_TOPIC, QoS::ExactlyOnce, false, delay.to_be_bytes()
+    ).await {
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, delay, DELAY_TOPIC, _error);
     } else {
         debug_println!("{} successfully published {} to topic: {}", analyser_id, delay, DELAY_TOPIC);
     }
 
     let mut publisher_topics = Vec::with_capacity(instancecount as usize);
     for i in 1..=instancecount {
-        let publisher_topic = publisher_topic_string(i, publisher_qos, delay);
+        let publisher_topic = mqqt_helper::publisher_topic_string(i, publisher_qos, delay);
         publisher_topics.push(publisher_topic);
     }
-
-    if subscribe_to_topics(analyser, analyser_id, analyser_qos, &publisher_topics).await.is_err() {
+    // Subscribe to the publisher topics
+    if mqqt_helper::subscribe_to_topics(analyser, analyser_id, analyser_qos, &publisher_topics).await.is_err() {
         return ExperimentResult::new(
-            qos_to_u8(analyser_qos),
+            mqqt_helper::qos_to_u8(analyser_qos),
             instancecount,
-            qos_to_u8(publisher_qos),
+            mqqt_helper::qos_to_u8(publisher_qos),
             delay, 
             Vec::new(),
             SysResult::default()
         );
     }
-
-    let mut previous_counter: [u64; 5] = [0; 5];
-    let mut message_count: [u64; 5] = [0; 5];
-    let mut out_of_order_count: [u64; 5] = [0; 5];
-    let mut message_times: [Vec<(u64, Instant)>; 5] = Default::default();
+    // Publisher topic measurements 
+    let mut previous_counter: Vec<u64> = vec![0; instancecount as usize];
+    let mut message_count: Vec<u64> = vec![0; instancecount as usize];
+    let mut out_of_order_count: Vec<u64> = vec![0; instancecount as usize];
+    let mut message_times: Vec<Vec<(u64, Instant)>> = vec![Default::default(); instancecount as usize];
 
     // Mosquitto $SYS broker measurements
     let mut nconnected_clients: u64 = 0;
@@ -148,58 +198,50 @@ async fn conduct_experiment(
     let mut npub_msgs_sent: u64 = 0;
     let mut npub_msgs_dropped: u64 = 0;
 
-    let start = std::time::Instant::now();
     // Event loop to handle incoming messages
+    let start = std::time::Instant::now();
     while start.elapsed().as_secs() <= SEND_DURATION.as_secs() {
         if let Ok(event) = eventloop.poll().await {
             match event {
                 Event::Incoming(Packet::Publish(publish)) => {
                     // Print the payload of the incoming message
                     if publisher_topics.contains(&publish.topic) {
-                        let i = publisher_topic_instance(&publish.topic).unwrap() - 1;
+                        let i = mqqt_helper::publisher_topic_instance(&publish.topic).unwrap() - 1;
                         message_count[i] += 1;
 
-                        let counter = bytes_to_u64(&publish);
-
+                        let counter = mqqt_helper::bytes_to_u64(&publish);
                         if counter < previous_counter[i] {
                             out_of_order_count[i] += 1;
                         }
                         previous_counter[i] = counter;
 
                         message_times[i].push((counter, std::time::Instant::now()));
-
                         debug_println!("{} received {} on {}", analyser_id, counter, publish.topic);
                     }
                     else if publish.topic == CLIENTS_CONNECTED_TOPIC {
-                        nconnected_clients = utf8_to_u64(&publish);
-                        
-                        println!("Number of connected clients: {}", nconnected_clients);
+                        nconnected_clients = mqqt_helper::utf8_to_u64(&publish);
+                        debug_println!("Number of connected clients: {}", nconnected_clients);
                     }
                     else if publish.topic == CURRENT_SIZE_TOPIC {                        
-                        heap_size_sum += utf8_to_u64(&publish);
+                        heap_size_sum += mqqt_helper::utf8_to_u64(&publish);
                         heap_size_counter += 1;
-
                         debug_println!("Heap size sum: {}", heap_size_sum);
                     }
                     else if publish.topic == MAX_SIZE_TOPIC {
-                        max_heap_size = utf8_to_u64(&publish);
-                        
+                        max_heap_size = mqqt_helper::utf8_to_u64(&publish);
                         debug_println!("Maximum heap size: {}", max_heap_size);
                     }
                     else if publish.topic == PUB_MSGS_RECEIVED_TOPIC {
-                        npub_msgs_recv = utf8_to_u64(&publish);
-
-                        println!("Number of publisher messages received: {}", npub_msgs_recv);
+                        npub_msgs_recv = mqqt_helper::utf8_to_u64(&publish);
+                        debug_println!("Number of publisher messages received: {}", npub_msgs_recv);
                     }
                     else if publish.topic == PUB_MSGS_SENT_TOPIC {
-                        npub_msgs_sent = utf8_to_u64(&publish);
-
-                        println!("Number of publisher messages sent: {}", npub_msgs_sent);
+                        npub_msgs_sent = mqqt_helper::utf8_to_u64(&publish);
+                        debug_println!("Number of publisher messages sent: {}", npub_msgs_sent);
                     }
                     else if publish.topic == PUB_MSGS_DROPPED_TOPIC {
-                        npub_msgs_dropped = utf8_to_u64(&publish);
-
-                        println!("Number of publisher messages dropped: {}", npub_msgs_dropped);
+                        npub_msgs_dropped = mqqt_helper::utf8_to_u64(&publish);
+                        debug_println!("Number of publisher messages dropped: {}", npub_msgs_dropped);
                     }
                 }
                 _ => {}
@@ -207,16 +249,16 @@ async fn conduct_experiment(
         }
     }
 
+    // Save topic results
     let mut topic_results = Vec::new();
-
     for i in 0..instancecount as usize {
-        let expected_count = *counters[i].lock().unwrap(); // TODO: Handle error?
+        let expected_count = *counters[i].lock().unwrap(); 
         let message_rate = message_count[i] as f64 / SEND_DURATION.as_secs() as f64;
         let loss_rate = compute_loss_rate(expected_count, message_count[i]);
         let out_of_order_rate = compute_out_of_order_rate(message_count[i], out_of_order_count[i]);
         let inter_message_gap = compute_median_inter_message_gap(&message_times[i]);
 
-        let topic = publisher_topic_string((i + 1) as u8, publisher_qos, delay);
+        let topic = mqqt_helper::publisher_topic_string((i + 1) as u8, publisher_qos, delay);
 
         topic_results.push(
             TopicResult::new(
@@ -229,8 +271,8 @@ async fn conduct_experiment(
         );
     }
 
+    // Save sys results
     let avg_heap_size = compute_avg_heap_size(heap_size_sum, heap_size_counter);
-
     let sys_result = SysResult::new(
         nconnected_clients,
         avg_heap_size,
@@ -240,10 +282,11 @@ async fn conduct_experiment(
         npub_msgs_dropped
     );
 
+    // Return experiment results
     ExperimentResult::new(
-        qos_to_u8(analyser_qos),
+        mqqt_helper::qos_to_u8(analyser_qos),
         instancecount,
-        qos_to_u8(publisher_qos),
+        mqqt_helper::qos_to_u8(publisher_qos),
         delay,
         topic_results,
         sys_result

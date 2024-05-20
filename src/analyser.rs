@@ -5,7 +5,7 @@ use rumqttc::{AsyncClient, Event, EventLoop, Packet, Publish, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 use chrono::{Local, Timelike};
 
-use crate::{create_mqtt_conn, publisher_topic_string, publisher_topic_instance, qos_to_u8, subscribe_to_topics};
+use crate::{bytes_to_u64, create_mqtt_conn, publisher_topic_instance, publisher_topic_string, qos_to_u8, subscribe_to_topics, utf8_to_u64};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
 use crate::experiment::{ExperimentResult, SysResult, TopicResult};
 
@@ -30,7 +30,9 @@ pub async fn main_analyser(hostname: &str, port: u16, counters: Vec<Arc<Mutex<u6
     let delays = [0, 1, 2, 4];
 
     let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port, Duration::from_secs(1));
-
+    
+    println!("{} connected to {}:{}", analyser_id, hostname, port);
+    
     let mut experiment_results = Vec::new();
 
     let sys_topics = vec![
@@ -95,21 +97,21 @@ async fn conduct_experiment(
         counters: &Vec<Arc<Mutex<u64>>>) -> ExperimentResult {
        
     // Publish the instancecount
-    if let Err(error) = analyser.publish(INSTANCECOUNT_TOPIC, analyser_qos, false, instancecount.to_be_bytes()).await {
+    if let Err(error) = analyser.publish(INSTANCECOUNT_TOPIC, QoS::ExactlyOnce, false, instancecount.to_be_bytes()).await {
         debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC, error);
     } else {
         debug_println!("{} successfully published {} to topic: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC);
     }
 
     // Publish the qos
-    if let Err(error) = analyser.publish(QOS_TOPIC, analyser_qos, false, qos_to_u8(publisher_qos).to_be_bytes()).await {
+    if let Err(error) = analyser.publish(QOS_TOPIC, QoS::ExactlyOnce, false, qos_to_u8(publisher_qos).to_be_bytes()).await {
         debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, qos_to_u8(publisher_qos), QOS_TOPIC, error);
     } else {
         debug_println!("{} successfully published {} to topic: {}", analyser_id, qos_to_u8(publisher_qos), QOS_TOPIC);
     }
 
     // Publish the delay
-    if let Err(error) = analyser.publish(DELAY_TOPIC, analyser_qos, false, delay.to_be_bytes()).await {
+    if let Err(error) = analyser.publish(DELAY_TOPIC, QoS::ExactlyOnce, false, delay.to_be_bytes()).await {
         debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, delay, DELAY_TOPIC, error);
     } else {
         debug_println!("{} successfully published {} to topic: {}", analyser_id, delay, DELAY_TOPIC);
@@ -225,6 +227,7 @@ async fn conduct_experiment(
     for i in 0..instancecount as usize {
         let expected_count = *counters[i].lock().unwrap(); // TODO: Handle error?
         let message_rate = message_count[i] as f64 / SEND_DURATION.as_secs() as f64;
+        println!("message rate: {}", message_rate);
         let loss_rate = compute_loss_rate(expected_count, message_count[i]);
         let out_of_order_rate = compute_out_of_order_rate(message_count[i], out_of_order_count[i]);
         let inter_message_gap = compute_median_inter_message_gap(&message_times[i]);
@@ -330,18 +333,4 @@ fn compute_avg_heap_size(heap_size_sum: u64, heap_size_counter: u64) -> u64 {
     } else {
         heap_size_sum / heap_size_counter
     }
-}
-
-fn bytes_to_u64(publish: &Publish) -> u64 {
-    let payload = &publish.payload.to_vec();
-    let mut array = [0u8; 8];
-    let len = payload.len().min(8);
-    array[..len].copy_from_slice(&payload[..len]);
-    u64::from_be_bytes(array)
-}
-
-fn utf8_to_u64(publish: &Publish) -> u64 {
-    let payload = &publish.payload;
-    let payload_str = std::str::from_utf8(&payload).unwrap();
-    payload_str.parse::<u64>().unwrap()
 }

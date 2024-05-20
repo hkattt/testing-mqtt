@@ -5,11 +5,11 @@ mod experiment;
 use std::{sync::{Arc, Mutex}, time::Duration};
 use std::fmt::Debug;
 
-use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, QoS};
+use rumqttc::{AsyncClient, ClientError, EventLoop, MqttOptions, Publish, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 
 // Broker details
-const HOSTNAME: &str            = "localhost";
+const HOSTNAME: &str            = "test.mosquitto.org";
 const PORT: u16                 = 1883;
 
 // MQQT topics
@@ -22,7 +22,7 @@ const TOPIC_RESULTS_FILE: &str  = "topic-results.csv";
 const SYS_RESULT_FILE: &str     = "sys-results.csv";
 
 // Publisher send duration (seconds)
-const SEND_DURATION: Duration   = Duration::from_secs(1); 
+const SEND_DURATION: Duration   = Duration::from_secs(2); 
 // Maximum number of publishers 
 const NPUBLISHERS: u8           = 5;
 
@@ -156,4 +156,18 @@ fn u8_to_qos(qos: u8) -> Option<QoS> {
         2 => Some(QoS::ExactlyOnce),
         _ => None, // Invalid QoS
     }
+}
+
+fn bytes_to_u64(publish: &Publish) -> u64 {
+    let payload = &publish.payload.to_vec();
+    let mut array = [0u8; 8];
+    let len = payload.len().min(8);
+    array[..len].copy_from_slice(&payload[..len]);
+    u64::from_be_bytes(array)
+}
+
+fn utf8_to_u64(publish: &Publish) -> u64 {
+    let payload = &publish.payload;
+    let payload_str = std::str::from_utf8(&payload).unwrap();
+    payload_str.parse::<u64>().unwrap()
 }

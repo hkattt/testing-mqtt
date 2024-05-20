@@ -5,6 +5,14 @@ use csv::Writer;
 
 use crate::EXPERIMENT_DIR;
 
+/// Stores the MQQT broker $SYS stats measured during an experiment
+/// 
+/// * `nconnected_clients`: Number of clients connected to the broker
+/// * `avg_heap_size`: Average heap size used by the broker
+/// * `max_heap_size`: Maximum heap size used by the broker (NOT max available)
+/// * `npub_msgs_recv`: Total number of publisher messages received
+/// * `npub_msgs_sent`: Total number of publisher messages sent
+/// * `npub_msgs_dropped`: Total number of publisher messages dropped
 #[derive(Default)]
 pub struct SysResult {
     nconnected_clients: u64, 
@@ -35,6 +43,13 @@ impl SysResult {
     }
 }
 
+/// Stores the counter topic stats measured during an experiment
+/// 
+/// * `topic`: Topic being published to
+/// * `message_rate`: Message rate of messages sent to the topic
+/// * `loss_rate`: Loss rate of messages sent to the topic
+/// * `out_of_order_rate`: Rate of out-of-order messages send to the topic
+/// * `inter_message_gap`: Median inter-message gap between messages sent to the topic
 #[derive(Default)]
 pub struct TopicResult {
     topic: String, 
@@ -62,6 +77,14 @@ impl TopicResult {
     }
 }
 
+/// Stores the measurements taken during an experiment
+/// 
+/// * `analyser_qos`: Analyser quality-of-service used
+/// * `instancecount`: Number of instances used
+/// * `publisher_qos`: Publisher quality-of-service used
+/// * `delay`: Delay used
+/// * `topic_results`: Results from each counter topic
+/// * `sys_result`: Broker $SYS results
 pub struct ExperimentResult {
     analyser_qos: u8,
     instancecount: u8, 
@@ -91,6 +114,15 @@ impl ExperimentResult {
     }    
 }
 
+/// Saves experiment results to CSV files
+/// 
+/// # Arguments
+/// * `experiment_results`: Experiment results to be saved
+/// * `topic_results_file`: File name for the counter topic results
+/// * `sys_results_file`: File name for the broker $SYS results
+/// 
+/// # Returns
+/// IO::Error if an issue occurs
 pub fn save_experiment_results(
         experiment_results: Vec<ExperimentResult>, 
         topic_results_file: &str, 
@@ -103,14 +135,16 @@ pub fn save_experiment_results(
         }
     }
 
+    // Format output file paths
     let topic_results_file_path = format!("{}/{}", EXPERIMENT_DIR, topic_results_file);
     let sys_results_file_path = format!("{}/{}", EXPERIMENT_DIR, sys_results_file);
 
+    // Create topic results file (or open if it exists)
     let topic_results_file = match File::create(topic_results_file_path) {
         Ok(file) => file,
         Err(error) => return Err(error),
     };
-
+    // Create sys results file (or open if it exists)
     let sys_results_file = match File::create(sys_results_file_path) {
         Ok(file) => file,
         Err(error) => return Err(error),
@@ -119,17 +153,18 @@ pub fn save_experiment_results(
     let mut topic_results_write = Writer::from_writer(topic_results_file);
     let mut sys_results_write = Writer::from_writer(sys_results_file);
 
-    // Write CSV headers
+    // Write topic results CSV headers
     topic_results_write.write_record(&[
         "experiment-id", "analyser-qos", "instancecount", "publisher-qos", "delay", "topic", 
         "message-rate", "loss-rate", "out-of-order-rate", "inter-message-gap"
     ])?; 
-
+    // Write sys results CSV headers
     sys_results_write.write_record(&[
         "experiment-id", "analyser-qos", "instancecount", "publisher-qos", "delay", "nconnected-clients", 
         "avg-heap-size", "max-heap-size", "npub-msg-recv", "npub-msg-sent", "npub-msg-dropped"
     ])?;
-
+    
+    // Save each experiment
     for experiment_result in experiment_results.iter() {
         let experiment_id = format!(
             "experiment{}-{}-{}-{}",
@@ -143,6 +178,15 @@ pub fn save_experiment_results(
     Ok(())
 }
 
+/// Saves the topic results of an experiment result to a CSV file
+/// 
+/// # Arguments
+/// * `writer`: Writer used to write to the CSV file
+/// * `experiment_id`: Unique identifier for the experiment
+/// * `experiment_result`: Experiment result containing the topic results to be saved
+/// 
+/// # Returns
+/// IO::Error if an issue occurs
 fn save_topic_results(writer: &mut Writer<File>, experiment_id: &str, experiment_result: &ExperimentResult) -> io::Result<()> {    
     let topic_results = &experiment_result.topic_results;
 
@@ -169,6 +213,15 @@ fn save_topic_results(writer: &mut Writer<File>, experiment_id: &str, experiment
     Ok(())  
 }
 
+/// Saves the sys results of an experiment result to a CSV file
+/// 
+/// # Arguments
+/// * `writer`: Writer used to write to the CSV file
+/// * `experiment_id`: Unique identifier for the experiment
+/// * `experiment_result`: Experiment result containing the sys results to be saved
+/// 
+/// # Returns
+/// IO::Error if an issue occurs
 fn save_sys_result(writer: &mut Writer<File>, experiment_id: &str, experiment_result: &ExperimentResult) -> io::Result<()> {    
     let sys_result = &experiment_result.sys_result;
 

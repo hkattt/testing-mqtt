@@ -8,10 +8,10 @@ use::debug_print::{debug_println, debug_eprintln};
 use crate::{bytes_to_u64, create_mqtt_conn, publisher_topic_string, qos_to_u8, subscribe_to_topics, u8_to_qos};
 use crate::{INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC, SEND_DURATION};
 
-pub async fn main_publisher(publisher_index: u8, hostname: &str, port: u16, running: Arc<Mutex<bool>>, counter: Arc<Mutex<u64>>) {
+pub async fn main_publisher(publisher_index: u8, hostname: Arc<String>, port: u16, running: Arc<Mutex<bool>>, counter: Arc<Mutex<u64>>) {
     let publisher_id = format!("pub-{}", publisher_index);
 
-    let (publisher, mut eventloop) = create_mqtt_conn(&publisher_id, hostname, port, Duration::from_secs(5));
+    let (publisher, mut eventloop) = create_mqtt_conn(&publisher_id, &hostname, port, Duration::from_secs(5));
     
     println!("{} connected to {}:{}", publisher_id, hostname, port);
     

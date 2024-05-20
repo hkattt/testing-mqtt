@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use rumqttc::{AsyncClient, Event, EventLoop, Packet, Publish, QoS};
+use rumqttc::{AsyncClient, Event, EventLoop, Packet, QoS};
 use::debug_print::{debug_println, debug_eprintln};
 use chrono::{Local, Timelike};
 
@@ -19,17 +19,17 @@ const PUB_MSGS_RECEIVED_TOPIC: &str  = "$SYS/broker/publish/messages/received";
 const PUB_MSGS_SENT_TOPIC: &str      = "$SYS/broker/publish/messages/sent";
 const PUB_MSGS_DROPPED_TOPIC: &str   = "$SYS/broker/publish/messages/dropped";
 
-pub async fn main_analyser(hostname: &str, port: u16, counters: Vec<Arc<Mutex<u64>>>) -> Vec<ExperimentResult> {
+pub async fn main_analyser(
+        hostname: Arc<String>, 
+        port: u16,
+        instancecounts: Vec<u8>,
+        qoss: Vec<QoS>,
+        delays: Vec<u64>, 
+        counters: Vec<Arc<Mutex<u64>>>) -> Vec<ExperimentResult> 
+    {
     let analyser_id = "analyser";
 
-    // 1 to 5 publishers
-    let instancecounts = [1, 2, 3, 4, 5];
-    // 3 different quality-of-service levels
-    let qoss = [QoS::AtMostOnce, QoS::AtLeastOnce, QoS::ExactlyOnce];
-    // 0ms, 1ms, 2ms, 4ms message delay
-    let delays = [0, 1, 2, 4];
-
-    let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, hostname, port, Duration::from_secs(1));
+    let (analyser, mut eventloop) = create_mqtt_conn(analyser_id, &hostname, port, Duration::from_secs(1));
     
     println!("{} connected to {}:{}", analyser_id, hostname, port);
     
@@ -44,10 +44,10 @@ pub async fn main_analyser(hostname: &str, port: u16, counters: Vec<Arc<Mutex<u6
         return Vec::new();
     }
 
-    for analyser_qos in qoss {
-        for instancecount in instancecounts {
-            for publisher_qos in qoss {
-                for delay in delays {
+    for analyser_qos in &qoss {
+        for instancecount in &instancecounts {
+            for publisher_qos in &qoss {
+                for delay in &delays {
                     // Get the current local time
                     let local_time = Local::now();
 
@@ -59,9 +59,9 @@ pub async fn main_analyser(hostname: &str, port: u16, counters: Vec<Arc<Mutex<u6
                         \tpublisher qos: {}\n\
                         \tdelay: {}ms\n",
                         local_time.time().hour(), local_time.time().minute(), local_time.time().second(),
-                        qos_to_u8(analyser_qos),
+                        qos_to_u8(*analyser_qos),
                         instancecount,
-                        qos_to_u8(publisher_qos),
+                        qos_to_u8(*publisher_qos),
                         delay
                     );
 
@@ -70,10 +70,10 @@ pub async fn main_analyser(hostname: &str, port: u16, counters: Vec<Arc<Mutex<u6
                         conduct_experiment(&analyser, 
                                 &mut eventloop, 
                                 analyser_id, 
-                                analyser_qos, 
-                                instancecount, 
-                                publisher_qos, 
-                                delay,
+                                *analyser_qos, 
+                                *instancecount, 
+                                *publisher_qos, 
+                                *delay,
                                 &counters)
                                 .await;
                     
@@ -94,8 +94,8 @@ async fn conduct_experiment(
         instancecount: u8, 
         publisher_qos: QoS, 
         delay: u64,
-        counters: &Vec<Arc<Mutex<u64>>>) -> ExperimentResult {
-       
+        counters: &Vec<Arc<Mutex<u64>>>) -> ExperimentResult 
+    {
     // Publish the instancecount
     if let Err(error) = analyser.publish(INSTANCECOUNT_TOPIC, QoS::ExactlyOnce, false, instancecount.to_be_bytes()).await {
         debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC, error);
@@ -144,11 +144,8 @@ async fn conduct_experiment(
     let mut heap_size_sum: u64 = 0;
     let mut heap_size_counter: u64 = 0;
     let mut max_heap_size: u64 = 0;
-    let mut npub_msgs_recv_init: u64 = 0;
     let mut npub_msgs_recv: u64 = 0;
-    let mut npub_msgs_sent_init: u64 = 0;
     let mut npub_msgs_sent: u64 = 0;
-    let mut npub_msgs_dropped_init: u64 = 0;
     let mut npub_msgs_dropped: u64 = 0;
 
     let start = std::time::Instant::now();
@@ -176,7 +173,7 @@ async fn conduct_experiment(
                     else if publish.topic == CLIENTS_CONNECTED_TOPIC {
                         nconnected_clients = utf8_to_u64(&publish);
                         
-                        debug_println!("Number of connected clients: {}", nconnected_clients);
+                        println!("Number of connected clients: {}", nconnected_clients);
                     }
                     else if publish.topic == CURRENT_SIZE_TOPIC {                        
                         heap_size_sum += utf8_to_u64(&publish);
@@ -191,30 +188,18 @@ async fn conduct_experiment(
                     }
                     else if publish.topic == PUB_MSGS_RECEIVED_TOPIC {
                         npub_msgs_recv = utf8_to_u64(&publish);
-                        
-                        if npub_msgs_recv_init == 0 {
-                            npub_msgs_recv_init = npub_msgs_recv;
-                        }
 
-                        debug_println!("Number of publisher messages received: {}", npub_msgs_recv);
+                        println!("Number of publisher messages received: {}", npub_msgs_recv);
                     }
                     else if publish.topic == PUB_MSGS_SENT_TOPIC {
                         npub_msgs_sent = utf8_to_u64(&publish);
 
-                        if npub_msgs_sent_init == 0 {
-                            npub_msgs_sent_init = npub_msgs_sent;
-                        }
-
-                        debug_println!("Number of publisher messages sent: {}", npub_msgs_sent);
+                        println!("Number of publisher messages sent: {}", npub_msgs_sent);
                     }
                     else if publish.topic == PUB_MSGS_DROPPED_TOPIC {
                         npub_msgs_dropped = utf8_to_u64(&publish);
 
-                        if npub_msgs_dropped_init == 0 {
-                            npub_msgs_dropped_init = npub_msgs_dropped;
-                        }
-
-                        debug_println!("Number of publisher messages dropped: {}", npub_msgs_dropped);
+                        println!("Number of publisher messages dropped: {}", npub_msgs_dropped);
                     }
                 }
                 _ => {}
@@ -227,7 +212,6 @@ async fn conduct_experiment(
     for i in 0..instancecount as usize {
         let expected_count = *counters[i].lock().unwrap(); // TODO: Handle error?
         let message_rate = message_count[i] as f64 / SEND_DURATION.as_secs() as f64;
-        println!("message rate: {}", message_rate);
         let loss_rate = compute_loss_rate(expected_count, message_count[i]);
         let out_of_order_rate = compute_out_of_order_rate(message_count[i], out_of_order_count[i]);
         let inter_message_gap = compute_median_inter_message_gap(&message_times[i]);
@@ -246,9 +230,6 @@ async fn conduct_experiment(
     }
 
     let avg_heap_size = compute_avg_heap_size(heap_size_sum, heap_size_counter);
-    npub_msgs_recv -= npub_msgs_recv_init;
-    npub_msgs_sent -= npub_msgs_sent_init;
-    npub_msgs_dropped -= npub_msgs_dropped_init;
 
     let sys_result = SysResult::new(
         nconnected_clients,

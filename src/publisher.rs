@@ -14,7 +14,7 @@ use std::{
 };
 
 use crate::{
-    mqqt_helper,
+    mqtt_helper,
     INSTANCECOUNT_TOPIC,
     QOS_TOPIC,
     DELAY_TOPIC,
@@ -25,12 +25,12 @@ use crate::{
 /// 
 /// # Arguments
 /// * `publisher_index`: Publisher instance
-/// * `hostname`: Host name of the MQQT broker
-/// * `port`: Port that the MQQT broker is on
+/// * `hostname`: Host name of the MQTT broker
+/// * `port`: Port that the MQTT broker is on
 /// * `running`: Indicates if the analyser is still running
 /// * `counter`: Counter publishes by the publisher
 /// 
-/// The publisher connects to the provided MQQT broker hostname and port before
+/// The publisher connects to the provided MQTT broker hostname and port before
 /// subscribing to the instancecount, qos and delay topics. The publisher continuously 
 /// queries these topics for the next experiment parameters. Publishes a counter using
 /// the provided parameters for SEND_DURATION seconds. Stops once the analyser is complete.
@@ -43,7 +43,7 @@ pub async fn main_publisher(
     {
     let publisher_id = format!("pub-{}", publisher_index);
 
-    let (publisher, mut eventloop) = mqqt_helper::create_mqtt_conn(
+    let (publisher, mut eventloop) = mqtt_helper::create_mqtt_conn(
         &publisher_id, &hostname, port, Duration::from_secs(5)
     );
     
@@ -54,7 +54,7 @@ pub async fn main_publisher(
     // Subscribe to instancecount, qos, and delay topics
     // Use the highest level of QoS to ensure delivery. Need to receive the experiment parameters
     let topics = [INSTANCECOUNT_TOPIC, QOS_TOPIC, DELAY_TOPIC];
-    if mqqt_helper::subscribe_to_topics(&publisher, &publisher_id, QoS::ExactlyOnce, &topics).await.is_err() {
+    if mqtt_helper::subscribe_to_topics(&publisher, &publisher_id, QoS::ExactlyOnce, &topics).await.is_err() {
         return;
     }
 
@@ -67,7 +67,7 @@ pub async fn main_publisher(
             None => return
         };
 
-        let publisher_topic = mqqt_helper::publisher_topic_string(publisher_index, qos, delay);
+        let publisher_topic = mqtt_helper::publisher_topic_string(publisher_index, qos, delay);
 
         // Clone variables to pass to the task thread
         let publisher_clone = Arc::clone(&publisher);
@@ -78,12 +78,12 @@ pub async fn main_publisher(
         let counter_task = task::spawn(async move {
             if publisher_index <= instancecount {
                 debug_println!("{} publishing to {} using instancecount: {}, qos: {:?}, and delay: {}", 
-                    publisher_id_clone, publisher_topic, instancecount, mqqt_helper::qos_to_u8(qos), delay);
+                    publisher_id_clone, publisher_topic, instancecount, mqtt_helper::qos_to_u8(qos), delay);
                 *counter_clone.lock().unwrap() = publish_counter(&publisher_clone, &publisher_id_clone, &publisher_topic, qos, delay).await;
             }
         });
 
-        // Poll the eventloop to keep the MQQT connection alive
+        // Poll the eventloop to keep the MQTT connection alive
         while !counter_task.is_finished() {
             eventloop.poll().await.unwrap();
         }
@@ -153,13 +153,13 @@ async fn receive_topic_values(eventloop: &mut EventLoop, _publisher_id: &str) ->
                     } // Receive qos 
                     else if publish.topic == QOS_TOPIC {
                         qos = Some(
-                            mqqt_helper::u8_to_qos(
+                            mqtt_helper::u8_to_qos(
                                 u8::from_be_bytes([publish.payload[0]])
                             )
                         );
                     } // Receive delay 
                     else if publish.topic == DELAY_TOPIC {
-                        delay = Some(mqqt_helper::bytes_to_u64(&publish));
+                        delay = Some(mqtt_helper::bytes_to_u64(&publish));
                     } 
                 }
                 _ => ()

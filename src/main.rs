@@ -1,7 +1,7 @@
 mod analyser;
 mod publisher;
 mod experiment;
-mod mqqt_helper;
+mod mqtt_helper;
 
 use rumqttc::QoS;
 
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let qoss_str = args_iter.next().ok_or("Missing QoS list after -q")?;
                 qoss = qoss_str
                     .split(',')
-                    .filter_map(|s| mqqt_helper::str_to_qos(s))
+                    .filter_map(|s| mqtt_helper::str_to_qos(s))
                     .collect();
             },
             // Delay list

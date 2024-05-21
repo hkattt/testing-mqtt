@@ -28,7 +28,7 @@ log_dest file /var/log/mosquitto/mosquitto.log
 include_dir /etc/mosquitto/conf.d
 ```
 
-The project uses Python to graph the experiment results. See the [Python Download](https://www.python.org/downloads/) for further details on installing Python. Our Python script requires the `numpy`, `pandas`, and `matplotlib` libraries which can be installed using the `pip` package manager. 
+The project uses Python to graph the experiment results. See the [Python Download](https://www.python.org/downloads/) page for installation steps. Our Python script requires the `numpy`, `pandas`, and `matplotlib` libraries which can be installed using the `pip` package manager. 
 
 ## Usage
 
@@ -37,8 +37,8 @@ The usage for the program is:
 mqqt [-h <hostname>] [-p <port>] [-n <npublishers>] [-i <instancecount list>] [-q <qos list>] [-d <delay list>]
 ```
 Where
-* `-h` specifies the hostname of the MQQT broker
-* `-p` specifies the port that the MQQT broker is on
+* `-h` specifies the hostname of the MQTT broker
+* `-p` specifies the port that the MQTT broker is on
 * `-n` specifies the number of publishers
 * `-i` specifies the instancecounts to use during testing as a comma seperated list
 * `-q` specifies the quality-of-service levels (0, 1, and 2) to use during testing as a commas seperated list
@@ -79,6 +79,6 @@ The `results.py` script can be used *after* completing an experiment to visualis
     ├── analyser.rs
     ├── experiment.rs
     ├── main.rs
-    ├── mqqt_helper.rs
+    ├── mqtt_helper.rs
     └── publisher.rs
 ```

@@ -8,7 +8,7 @@ use std::{
 
 use crate::EXPERIMENT_DIR;
 
-/// Stores the MQQT broker $SYS stats measured during an experiment
+/// Stores the MQTT broker $SYS stats measured during an experiment
 /// 
 /// * `nconnected_clients`: Number of clients connected to the broker
 /// * `avg_heap_size`: Average heap size used by the broker

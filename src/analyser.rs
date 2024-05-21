@@ -99,6 +99,16 @@ pub async fn main_analyser(
                         mqtt_helper::qos_to_u8(*publisher_qos),
                         delay
                     );
+                    
+                    let publisher_topic = mqtt_helper::publisher_topic_string(*instancecount, *publisher_qos, *delay); 
+                    // Subscribe to the current publisher topic
+                    if let Err(_error) = analyser.subscribe(&publisher_topic, QoS::ExactlyOnce).await {
+                        debug_eprintln!("{} failed to subscribe to topic {} with error: {}", analyser_id, publisher_topic, _error);
+                        return Vec::new();
+                    } else {
+                        debug_println!("{} subscribed to topic: {}", analyser_id, publisher_topic);
+                    }
+
                     // Conduct experiment
                     let experiment_result = 
                         conduct_experiment(&analyser, 
@@ -135,7 +145,7 @@ pub async fn main_analyser(
 async fn conduct_experiment(
         analyser: &AsyncClient, 
         eventloop: &mut EventLoop, 
-        analyser_id: &str, 
+        _analyser_id: &str, 
         analyser_qos: QoS, 
         instancecount: u8, 
         publisher_qos: QoS, 
@@ -146,25 +156,25 @@ async fn conduct_experiment(
     if let Err(_error) = analyser.publish(
         INSTANCECOUNT_TOPIC, QoS::ExactlyOnce, false, instancecount.to_be_bytes()
     ).await {
-        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC, _error);
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", _analyser_id, instancecount, INSTANCECOUNT_TOPIC, _error);
     } else {
-        debug_println!("{} successfully published {} to topic: {}", analyser_id, instancecount, INSTANCECOUNT_TOPIC);
+        debug_println!("{} successfully published {} to topic: {}", _analyser_id, instancecount, INSTANCECOUNT_TOPIC);
     }
     // Publish the qos
     if let Err(_error) = analyser.publish(
         QOS_TOPIC, QoS::ExactlyOnce, false, mqtt_helper::qos_to_u8(publisher_qos).to_be_bytes()
     ).await {
-        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, mqtt_helper::qos_to_u8(publisher_qos), QOS_TOPIC, _error);
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", _analyser_id, mqtt_helper::qos_to_u8(publisher_qos), QOS_TOPIC, _error);
     } else {
-        debug_println!("{} successfully published {} to topic: {}", analyser_id, mqtt_helper::qos_to_u8(publisher_qos), QOS_TOPIC);
+        debug_println!("{} successfully published {} to topic: {}", _analyser_id, mqtt_helper::qos_to_u8(publisher_qos), QOS_TOPIC);
     }
     // Publish the delay
     if let Err(_error) = analyser.publish(
         DELAY_TOPIC, QoS::ExactlyOnce, false, delay.to_be_bytes()
     ).await {
-        debug_eprintln!("{} failed to publish {} to {} with error: {}", analyser_id, delay, DELAY_TOPIC, _error);
+        debug_eprintln!("{} failed to publish {} to {} with error: {}", _analyser_id, delay, DELAY_TOPIC, _error);
     } else {
-        debug_println!("{} successfully published {} to topic: {}", analyser_id, delay, DELAY_TOPIC);
+        debug_println!("{} successfully published {} to topic: {}", _analyser_id, delay, DELAY_TOPIC);
     }
 
     let mut publisher_topics = Vec::with_capacity(instancecount as usize);
@@ -172,17 +182,7 @@ async fn conduct_experiment(
         let publisher_topic = mqtt_helper::publisher_topic_string(i, publisher_qos, delay);
         publisher_topics.push(publisher_topic);
     }
-    // Subscribe to the publisher topics
-    if mqtt_helper::subscribe_to_topics(analyser, analyser_id, analyser_qos, &publisher_topics).await.is_err() {
-        return ExperimentResult::new(
-            mqtt_helper::qos_to_u8(analyser_qos),
-            instancecount,
-            mqtt_helper::qos_to_u8(publisher_qos),
-            delay, 
-            Vec::new(),
-            SysResult::default()
-        );
-    }
+
     // Publisher topic measurements 
     let mut previous_counter: Vec<u64> = vec![0; instancecount as usize];
     let mut message_count: Vec<u64> = vec![0; instancecount as usize];
@@ -216,7 +216,7 @@ async fn conduct_experiment(
                         previous_counter[i] = counter;
 
                         message_times[i].push((counter, std::time::Instant::now()));
-                        debug_println!("{} received {} on {}", analyser_id, counter, publish.topic);
+                        debug_println!("{} received {} on {}", _analyser_id, counter, publish.topic);
                     }
                     else if publish.topic == CLIENTS_CONNECTED_TOPIC {
                         nconnected_clients = mqtt_helper::utf8_to_u64(&publish);

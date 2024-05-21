@@ -51,7 +51,6 @@ where
             debug_eprintln!("{} failed to subscribe to topic {} with error: {}", _client_id, topic_str, error);
             return Err(error);
         } else {
-            // TODO: Replace with debug prints
             debug_println!("{} subscribed to topic: {}", _client_id, topic_str);
         }
     }

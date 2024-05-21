@@ -1,0 +1,11 @@
+experiment-id,analyser-qos,instancecount,publisher-qos,delay,nconnected-clients,avg-heap-size,max-heap-size,npub-msg-recv,npub-msg-sent,npub-msg-dropped
+experiment0-1-0-0,0,1,0,0,11,56405,77816,303458,67519,0
+experiment0-2-0-0,0,2,0,0,0,66008,0,344121,108220,0
+experiment0-3-0-0,0,3,0,0,0,67656,0,417548,181687,0
+experiment0-4-0-0,0,4,0,0,0,69336,0,535331,299510,0
+experiment0-5-0-0,0,5,0,0,0,70984,0,640722,404939,0
+experiment0-6-0-0,0,6,0,0,0,72648,0,817487,581744,0
+experiment0-7-0-0,0,7,0,0,0,74296,0,970216,734511,0
+experiment0-8-0-0,0,8,0,0,0,75984,79440,1242211,1006548,0
+experiment0-9-0-0,0,9,0,0,0,77656,81136,1503606,1267982,0
+experiment0-10-0-0,0,10,0,0,0,79320,82800,1799418,1563835,0

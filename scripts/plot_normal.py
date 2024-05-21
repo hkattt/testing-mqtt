@@ -1,5 +1,11 @@
+"""
+Script Name: plot_normal.py
+Description: Used to plot results received from the normal/standard local broker experiments
+Usage:
+    python3 plot_normal.py (-t normal-topic-results.csv) (-s normal-sys-results.csv)
+"""
+
 # Plotting libraries
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -8,8 +14,6 @@ import argparse
 
 INPUT_DIR          = "experiment-results/"
 OUTPUT_DIR         = "figures/"
-TOPIC_RESULTS_FILE = "topic-results.csv"
-SYS_RESULTS_FILE   = "sys-results.csv"
 
 def create_diff_cols(data, colname):
     diff_colname = colname + "-diff"

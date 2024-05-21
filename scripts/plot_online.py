@@ -1,5 +1,11 @@
+"""
+Script Name: plot_online.py
+Description: Used to plot results received from the online broker experiments
+Usage:
+    python3 plot_online.py (-t online-topic-results.csv) (-s online-sys-results.csv)
+"""
+
 # Plotting libraries
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -8,13 +14,6 @@ import argparse
 
 INPUT_DIR          = "experiment-results/"
 OUTPUT_DIR         = "figures/"
-TOPIC_RESULTS_FILE = "topic-results.csv"
-SYS_RESULTS_FILE   = "sys-results.csv"
-
-def create_diff_cols(data, colname):
-    diff_colname = colname + "-diff"
-    data[diff_colname] = data[colname].diff()
-    data.loc[0, diff_colname] = data.loc[0, colname]
 
 def create_instance_plots(data, ycol, title, ylabel, file_name, ignore_zeros=False):
     # Create a seperate plot for each instancecount
@@ -99,11 +98,6 @@ def main():
     pd.set_option("display.max_columns", None) 
     # Prevent line wrapping
     pd.set_option("display.expand_frame_repr", False)
-
-    # Add difference columns
-    create_diff_cols(sys_results, "npub-msg-recv")
-    create_diff_cols(sys_results, "npub-msg-sent")
-    create_diff_cols(sys_results, "npub-msg-dropped")
 
     # Topic results graphs
 

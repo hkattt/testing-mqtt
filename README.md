@@ -85,20 +85,44 @@ python3 scripts/<script>.py (-t topic-results.csv) (-s sys-results.csv)
 ```
 ├── Cargo.lock
 ├── Cargo.toml
-├── README.md
 ├── experiment-results
+│   ├── many-sys-results.csv
+│   ├── many-topic-results.csv
+│   ├── normal-sys-results.csv
+│   ├── normal-topic-results.csv
+│   ├── online-sys-results.csv
+│   └── online-topic-results.csv
 ├── figures
+│   ├── many
+│   │   ├── avg-heap-size-plot.png
+│   │   └── message-rate-plot.png
+│   ├── normal
+│   │   ├── avg-heap-size-plot.png
+│   │   ├── loss-rate-plot.png
+│   │   ├── median-inter-message-plot.png
+│   │   ├── message-rate-plot.png
+│   │   ├── nconnected-clients-plot.png
+│   │   ├── npub-msgs-dropped.png
+│   │   ├── npub-msgs-recv.png
+│   │   ├── npub-msgs-sent.png
+│   │   └── out-of-order-rate-plot.png
+│   └── online
+│       ├── loss-rate-plot.png
+│       └── message-rate-plot.png
+├── README.md
 ├── scripts
 │   ├── delete-log.sh
 │   ├── log.sh
-│   ├── results.py
+│   ├── plot_many.py
+│   ├── plot_normal.py
+│   ├── plot_online.py
 │   ├── start.sh
 │   ├── status.sh
 │   └── stop.sh
 └── src
-    ├── analyser.rs
-    ├── experiment.rs
-    ├── main.rs
-    ├── mqtt_helper.rs
-    └── publisher.rs
+    ├── analyser.rs
+    ├── experiment.rs
+    ├── main.rs
+    ├── mqtt_helper.rs
+    └── publisher.rs
 ```

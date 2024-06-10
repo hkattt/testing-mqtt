@@ -1,6 +1,6 @@
-# COMP3310 - Assignment 3: Testing MQTT
+# Testing MQTT
 
-Hugo Kat: u7287091
+Testing the performance of the MQTT protocol for COMP3310 Computer Networks at the ANU.
 
 ## Requirements
 This MQTT network analyser was implemented in Rust. See the [Installation section](https://doc.rust-lang.org/book/ch01-01-installation.html) of The Rust Programming Language book for installation steps. 
